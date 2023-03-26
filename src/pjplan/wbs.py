@@ -28,6 +28,30 @@ class TaskList:
     def remove(self, item):
         return self.__list.remove(item)
 
+    def insert(self, index: int, item: 'Task'):
+        return self.__list.insert(index, item)
+
+    def move_before(self, item: 'Task', before_item: 'Task'):
+        if item not in self.__list:
+            raise RuntimeError("Item not found")
+        if before_item not in self.__list:
+            raise RuntimeError("Before Item not found")
+
+        self.__list.remove(item)
+        self.__list.insert(self.__list.index(before_item), item)
+
+    def move_after(self, item: 'Task', before_item: 'Task'):
+        if item not in self.__list:
+            raise RuntimeError("Item not found")
+        if before_item not in self.__list:
+            raise RuntimeError("Before Item not found")
+
+        self.__list.remove(item)
+        self.__list.insert(self.__list.index(before_item) + 1, item)
+
+    def index(self, item: 'Task'):
+        return self.__list.index(item)
+
     def remove_all(self, key=None, **kwargs) -> 'UnmodifiableTaskList':
         tasks_to_delete = self(key, **kwargs)
         if not tasks_to_delete:
@@ -57,6 +81,12 @@ class TaskList:
         vals = [v for v in other if v not in self.__list]
         return self.__list.__add__(vals)
 
+    @staticmethod
+    def __get_task_attribute(t: 'Task', attribute_name: str):
+        if attribute_name == 'parent_id':
+            return t.parent.id if t.parent else None
+        return t.__getattribute__(attribute_name) if attribute_name in t.__dict__ else None
+
     def __call__(self, key=None, **kwargs) -> Union[Optional['Task'], 'UnmodifiableTaskList']:
         if key is not None:
             if type(key) is int:
@@ -72,17 +102,37 @@ class TaskList:
             for k, v in kw.items():
                 if k.endswith("_like_"):
                     k = k[0:-6]
-                    if not re.search(v, t.__getattribute__(k)):
+                    if not re.search(v, self.__get_task_attribute(t, k)):
                         return False
                 elif k.endswith("_not_in_"):
                     k = k[0:-8]
-                    if t.__getattribute__(k) in v:
+                    if self.__get_task_attribute(t, k) in v:
                         return False
                 elif k.endswith("_in_"):
                     k = k[0:-4]
-                    if not t.__getattribute__(k) in v:
+                    if not self.__get_task_attribute(t, k) in v:
                         return False
-                elif t.__getattribute__(k) != v:
+                elif k.endswith("_ne_"):
+                    k = k[0:-4]
+                    if not self.__get_task_attribute(t, k) != v:
+                        return False
+                elif k.endswith("_le_"):
+                    k = k[0:-4]
+                    if not self.__get_task_attribute(t, k) <= v:
+                        return False
+                elif k.endswith("_lt_"):
+                    k = k[0:-4]
+                    if not self.__get_task_attribute(t, k) < v:
+                        return False
+                elif k.endswith("_ge_"):
+                    k = k[0:-4]
+                    if not self.__get_task_attribute(t, k) >= v:
+                        return False
+                elif k.endswith("_gt_"):
+                    k = k[0:-4]
+                    if not self.__get_task_attribute(t, k) > v:
+                        return False
+                elif self.__get_task_attribute(t, k) != v:
                     return False
             return True
 
@@ -158,6 +208,10 @@ class ChildrenList(TaskList):
     def remove(self, item: 'Task'):
         item.parent = None
 
+    def insert(self, index: int, task: 'Task'):
+        super().insert(index, task)
+        task.parent = self.__parent
+
 
 class PredecessorsList(TaskList):
     def __init__(self, parent: 'Task', _list):
@@ -169,6 +223,9 @@ class PredecessorsList(TaskList):
 
     def remove(self, item: 'Task'):
         self.__parent.predecessors = [v for v in self.__parent.predecessors if v != item]
+
+    def insert(self, index: int, item: 'Task'):
+        raise RuntimeError("Unsupported operation")
 
 
 class SuccessorsList(TaskList):
@@ -182,6 +239,8 @@ class SuccessorsList(TaskList):
     def remove(self, item: 'Task'):
         self.__parent.successors = [v for v in self.__parent.successors if v != item]
 
+    def insert(self, index: int, item: 'Task'):
+        raise RuntimeError("Unsupported operation")
 
 class Task:
     """
@@ -477,7 +536,10 @@ class WBS:
             return max(ends)
         return None
 
-    def remove_all(self, key = None, **kwargs):
+    def remove(self, item):
+        self.__root.all_children.remove(item)
+
+    def remove_all(self, key=None, **kwargs):
         return self.__root.all_children.remove_all(key, **kwargs)
 
     def __len__(self):

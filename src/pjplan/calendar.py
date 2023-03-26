@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Tuple
 
 
@@ -53,18 +53,33 @@ class CapacityCalendar(IWorkCalendar):
     """
 
     def __init__(self, capacities: List[Tuple[datetime, float]], working_days=None):
-        self.capacities = {c[0].strftime('%Y-%m-%d'): c[1] for c in capacities}
-        if len(capacities) == 0:
-            self.max_date = datetime(1970, 1, 1)
-            self.min_date = datetime(1970, 1, 1)
-        else:
-            self.max_date = max([c[0] for c in capacities])
-            self.min_date = min([c[0] for c in capacities])
+        self.capacities = {self.__key(c[0]): c[1] for c in capacities}
+        self.__calc_min_max_dates()
 
         if working_days is None:
             working_days = [0, 1, 2, 3, 4]
 
         self.working_days = working_days
+
+    @staticmethod
+    def __key(d: datetime) -> str:
+        return d.strftime('%Y-%m-%d')
+
+    def __calc_min_max_dates(self):
+        if len(self.capacities) == 0:
+            self.max_date = datetime(1970, 1, 1)
+            self.min_date = datetime(1970, 1, 1)
+        else:
+            self.max_date = max([datetime.strptime(c, '%Y-%m-%d') for c in self.capacities.keys()])
+            self.min_date = min([datetime.strptime(c, '%Y-%m-%d') for c in self.capacities.keys()])
+
+    def set_capacities(self, from_date: datetime, to_date: datetime, value: float):
+        d = from_date
+        while d <= to_date:
+            self.capacities[self.__key(d)] = value
+            d += timedelta(days=1)
+
+        self.__calc_min_max_dates()
 
     def get_available_hours(self, date):
         if date > self.max_date or date < self.min_date:
@@ -72,7 +87,7 @@ class CapacityCalendar(IWorkCalendar):
                 return 0
             return 8
 
-        capacity = self.capacities.get(date.strftime('%Y-%m-%d'))
+        capacity = self.capacities.get(self.__key(date))
         return capacity if capacity is not None else 0
 
     def __repr__(self) -> str:

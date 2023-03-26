@@ -1,0 +1,125 @@
+<html>
+<meta charset="utf-8">
+<body>
+<script src="https://storage.yandexcloud.net/gymboss-test/gantt/gantt/dhtmlxgantt.js?v=7.1.13"></script>
+<link rel="stylesheet" href="https://storage.yandexcloud.net/gymboss-test/gantt/gantt/dhtmlxgantt.css?v=7.1.13">
+<style>
+    html, body {
+        padding: 0px;
+        margin: 0px;
+        height: 100%;
+    }
+
+    .gantt_side_content.gantt_link_crossing {
+        top:0
+    }
+
+    $task_classes_def
+</style>
+<div id="gantt_here" style='width:100%; height:100%;'></div>
+<script>
+
+    gantt.plugins({
+        marker: true,
+        grouping: true
+    });
+
+    gantt.ext.zoom.init({
+        minColumnWidth: 80,
+        maxColumnWidth: 150,
+        levels: [
+            [
+                {unit: "year", format: "%Y", step: 1},
+                {unit: "month", format: "%M", step: 1},
+            ],
+            [
+                {unit: "month", format: "%M %Y", step: 1},
+                {
+                    unit: "week", step: 1, format: function (date) {
+                        var dateToStr = gantt.date.date_to_str("%d.%m");
+                        var endDate = gantt.date.add(date, -6, "day");
+                        return dateToStr(date) + " - " + dateToStr(endDate);
+                    }
+                }
+            ],
+            [
+                {unit: "month", format: "%M %y", step: 1},
+                {unit: "day", format: "%d.%m", step: 1}
+            ]
+        ],
+        useKey: "ctrlKey",
+        trigger: "wheel",
+        element: function () {
+            return gantt.$$root.querySelector(".gantt_task");
+        }
+    });
+
+    gantt.config.min_column_width = 20;
+    gantt.config.auto_types = true;
+
+    if ($today_marker) {
+        gantt.addMarker({
+            start_date: new Date(),
+            css: "today",
+        });
+    }
+
+    gantt.config.columns = $columns;
+
+    gantt.config.row_height = $row_height;
+
+    (function () {
+        gantt.config.font_width_ratio = 7;
+        gantt.templates.leftside_text = function leftSideTextTemplate(start, end, task) {
+            if (getTaskFitValue(task) === "left") {
+                return task.text;
+            }
+            return "";
+        };
+        gantt.templates.rightside_text = function rightSideTextTemplate(start, end, task) {
+            if (getTaskFitValue(task) === "right") {
+                return task.text;
+            }
+            return "";
+        };
+        gantt.templates.task_text = function taskTextTemplate(start, end, task) {
+            if (getTaskFitValue(task) === "center") {
+                return task.text;
+            }
+            return "";
+        };
+
+        function getTaskFitValue(task) {
+            var taskStartPos = gantt.posFromDate(task.start_date),
+                taskEndPos = gantt.posFromDate(task.end_date);
+
+            var width = taskEndPos - taskStartPos;
+            var textWidth = (task.text || "").length * gantt.config.font_width_ratio;
+
+            if (width < textWidth) {
+                var ganttLastDate = gantt.getState().max_date;
+                var ganttEndPos = gantt.posFromDate(ganttLastDate);
+                if (ganttEndPos - taskEndPos < textWidth) {
+                    return "left"
+                } else {
+                    return "right"
+                }
+            } else {
+                return "center";
+            }
+        }
+    })();
+
+    gantt.templates.task_class = function (start, end, task) {
+        return task.css_class;
+    };
+
+    gantt.config.readonly = $readonly;
+
+    gantt.init("gantt_here");
+
+    gantt.parse($gantt_data);
+
+</script>
+</body>
+</html>

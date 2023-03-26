@@ -1,6 +1,7 @@
 from datetime import datetime
 from unittest import TestCase
 
+import pjplan
 import pjplan as pl
 from pjplan import Task, WBS, GenericCalendar
 
@@ -54,11 +55,45 @@ class TestDefaultScheduler(TestCase):
         self.assertEqual(datetime(2025, 1, 1), s(2).start)
         self.assertEqual(datetime(2025, 1, 3), s(2).end)
 
+    def test_calc_4(self):
+        p = WBS()
+        p // Task(1, estimate=8, resource='default')
+        p(1) >> p // Task(2, 'ms', milestone=True)
+
+        s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
+
+        self.assertEqual(datetime(2025, 1, 2), s(1).end)
+        self.assertEqual(datetime(2025, 1, 2), s(2).start)
+
+    def test_calc_5(self):
+        p = WBS()
+        p // Task(1, estimate=8, resource='default')
+        p // Task(2, estimate=8)
+
+        p(2) >> p(1)
+
+        s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
+
+        self.assertEqual(datetime(2025, 1, 1), s(2).start)
+        self.assertEqual(datetime(2025, 1, 2), s(1).start)
+
     def test_validate_isolation(self):
         p = WBS("test")
         t1 = p // Task(1, '1')
 
         t1 << Task(2, '2')
+
+        self.assertRaises(RuntimeError, lambda: pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p))
+
+    def test_loops(self):
+        p = WBS()
+        t1 = p // Task(1, '1')
+        t2 = p // Task(2, '2')
+        t3 = p // Task(3, '3')
+
+        t1.successors.append(t2)
+        t2.successors.append(t3)
+        t3.successors.append(t1)
 
         self.assertRaises(RuntimeError, lambda: pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p))
 

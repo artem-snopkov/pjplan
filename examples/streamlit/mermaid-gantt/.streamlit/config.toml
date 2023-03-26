@@ -1,0 +1,5 @@
+[runner]
+
+# Allows you to type a variable or string by itself in a single line of Python code to write it to the app.
+# Default: true
+magicEnabled = false

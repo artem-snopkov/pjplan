@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Set
 
 from pjplan import Task, WBS, IResource, DEFAULT_RESOURCE
 
@@ -198,19 +198,24 @@ class DefaultScheduler(IScheduler):
                     raise RuntimeError(f"Task {t.id} ({t.name}) has predecessor {pr.id} ({pr.name}) w/o dates outside wbs")
 
     def __check_loops(self, project: WBS):
+        validated = set()
         for t in project:
-            self.__check_loops_from_task(t, [])
+            self.__check_loops_from_task(t, set(), validated)
 
-    def __check_loops_from_task(self, task: Task, visited_tasks: List):
-        if task in visited_tasks:
-            raise RuntimeError(
-                "Found circle",
-                [str(t.id) + ":" + t.name + "-->" for t in visited_tasks] + [str(task.id) + ":" + task.name]
-            )
-
-        if task.predecessors is None:
+    def __check_loops_from_task(self, task: Task, visited_tasks: Set[int], validated: Set[int]):
+        if task.id in validated:
             return
 
-        visited_tasks.append(task)
+        if task.id in visited_tasks:
+            raise RuntimeError(
+                "Found circle",
+                [str(t) + "-->" for t in visited_tasks] + [str(task.id) + ":" + task.name]
+            )
+
+        visited_tasks.add(task.id)
+
         for s in task.predecessors:
-            self.__check_loops_from_task(s, list(visited_tasks))
+            self.__check_loops_from_task(s, visited_tasks, validated)
+
+        visited_tasks.remove(task.id)
+        validated.add(task.id)
