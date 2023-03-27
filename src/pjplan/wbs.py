@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Iterable
 
 
 def _to_list(val: Union['Task', List['Task']]):
@@ -10,6 +10,99 @@ def _to_list(val: Union['Task', List['Task']]):
         return val
     else:
         raise RuntimeError("Unsupported type", type(val))
+
+
+class _Repr:
+    __bold = '\033[1m'
+    __red = '\033[91m'
+    __green = '\033[92m'
+    __yellow = '\033[93m'
+    __blue = '\033[94m'
+    __pink = '\033[95m'
+    __teal = '\033[96m'
+    __grey = '\033[97m'
+
+    __LEVEL_COLORS = [__blue, __teal, __yellow, __pink, __red, __grey]
+
+    @staticmethod
+    def __calc_max_title_len(task: 'Task', level, _current_max):
+        _current_max = max(_current_max, len('   ' * level) + len(task.name))
+        for ch in task.children:
+            _current_max = _Repr.__calc_max_title_len(ch, level + 1, _current_max)
+        return _current_max
+
+    @staticmethod
+    def __get_field_value(t: 'Task', field: str) -> str:
+        if field == 'predecessors':
+            return '[' + ','.join([str(p.id) for p in t.predecessors]) + ']'
+        if field == 'successors':
+            return '[' + ','.join([str(p.id) for p in t.successors]) + ']'
+        if field == 'parent':
+            return str(t.parent.id) if t.parent else ''
+
+        if field not in t.__dict__:
+            return ''
+
+        v = t.__getattribute__(field)
+        if isinstance(v, datetime):
+            return v.strftime('%d.%m.%Y %H:%M')
+
+        if v is None:
+            return '-'
+
+        return str(v)
+
+    @staticmethod
+    def __max_field_len(tasks: Iterable['Task'], field: str) -> int:
+        max_len = len(field) + 1
+        for t in tasks:
+            max_len = max(max_len, len(_Repr.__get_field_value(t, field)))
+            max_len = max(max_len, _Repr.__max_field_len(t.children, field))
+
+        return max_len
+
+    @staticmethod
+    def __print_task_subtree(task: 'Task', fields: List[str], level, fmt, children):
+        values = []
+        for f in fields:
+            if f == 'name':
+                values.append('   ' * level + task.name)
+            else:
+                values.append(_Repr.__get_field_value(task, f))
+
+        res = _Repr.__LEVEL_COLORS[level] + fmt.format(*values) + '\033[0m\n'
+        if children:
+            for ch in task.children:
+                res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children)
+
+        return res
+
+    @staticmethod
+    def repr(tasks: Iterable['Task'], fields: List[str] = None, children=True):
+        if fields is None:
+            fields = ['id', 'name', 'resource', 'estimate', 'spent', 'start', 'end', 'predecessors']
+
+        max_title_len = 0
+        for _t in tasks:
+            max_title_len = max(max_title_len, _Repr.__calc_max_title_len(_t, 0, 0))
+
+        fmt = ""
+        for f in fields:
+            if len(fmt) > 0:
+                fmt += "  "
+            if f.lower() == 'name':
+                fmt += f"{{:{max_title_len}}}"
+            else:
+                fmt += f"{{:{_Repr.__max_field_len(tasks, f)}}}"
+
+        title = [s.upper() for s in fields]
+
+        res = _Repr.__green + fmt.format(*title) + '\033[0m\n'
+
+        for _task in tasks:
+            res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children)
+
+        return res
 
 
 class TaskList:
@@ -185,7 +278,10 @@ class TaskList:
         return self.__list.__str__()
 
     def __repr__(self) -> str:
-        return self.__list.__repr__()
+        return _Repr.repr(self)
+
+    def print(self, fields: List[str] = None, children=True):
+        return print(_Repr.repr(self, fields, children))
 
 
 class UnmodifiableTaskList(TaskList):
@@ -241,6 +337,7 @@ class SuccessorsList(TaskList):
 
     def insert(self, index: int, item: 'Task'):
         raise RuntimeError("Unsupported operation")
+
 
 class Task:
     """
@@ -489,17 +586,21 @@ class Task:
     def __str__(self):
         return str(self.__to_dict())
 
-    def __repr__(self):
-        return self.__str__()
-
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
+    def __repr__(self):
+        return _Repr.repr([self])
+
+    def print(self, fields: List[str] = None, children=True):
+        return print(_Repr.repr([self], fields, children))
+
 
 class WBS:
+
 
     def __init__(self, name=None, tasks: List[Task] = None, **kwargs):
         self.__root = Task(0, name, children=tasks)
@@ -596,3 +697,9 @@ class WBS:
                 cloned_project.__setattr__(k, self.__getattribute__(k))
 
         return cloned_project
+
+    def __repr__(self):
+        return _Repr.repr(self.roots)
+
+    def print(self, fields: List[str] = None, children=True):
+        return print(_Repr.repr(self.roots, fields, children))
