@@ -13,7 +13,6 @@ def _to_list(val: Union['Task', List['Task']]):
 
 
 class _Repr:
-    __bold = '\033[1m'
     __red = '\033[91m'
     __green = '\033[92m'
     __yellow = '\033[93m'
@@ -22,7 +21,10 @@ class _Repr:
     __teal = '\033[96m'
     __grey = '\033[97m'
 
-    __LEVEL_COLORS = [__blue, __teal, __yellow, __pink, __red, __grey]
+    __DEFAULT_THEME = {
+        'header_color': __green,
+        'level_colors': [__blue, __teal, __yellow, __pink, __red, __grey]
+    }
 
     @staticmethod
     def __calc_max_title_len(task: 'Task', level, _current_max):
@@ -62,7 +64,7 @@ class _Repr:
         return max_len
 
     @staticmethod
-    def __print_task_subtree(task: 'Task', fields: List[str], level, fmt, children):
+    def __print_task_subtree(task: 'Task', fields: List[str], level, fmt, children, theme):
         values = []
         for f in fields:
             if f == 'name':
@@ -70,17 +72,23 @@ class _Repr:
             else:
                 values.append(_Repr.__get_field_value(task, f))
 
-        res = _Repr.__LEVEL_COLORS[level] + fmt.format(*values) + '\033[0m\n'
+        colors = theme['level_colors']
+        color = colors[level] if level < len(colors) else _Repr.__grey
+
+        res = color + fmt.format(*values) + '\033[0m\n'
         if children:
             for ch in task.children:
-                res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children)
+                res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children, theme)
 
         return res
 
     @staticmethod
-    def repr(tasks: Iterable['Task'], fields: List[str] = None, children=True):
+    def repr(tasks: Iterable['Task'], fields: List[str] = None, children=True, theme: dict = None):
         if fields is None:
             fields = ['id', 'name', 'resource', 'estimate', 'spent', 'start', 'end', 'predecessors']
+
+        if theme is None:
+            theme = _Repr.__DEFAULT_THEME
 
         max_title_len = 0
         for _t in tasks:
@@ -97,10 +105,10 @@ class _Repr:
 
         title = [s.upper() for s in fields]
 
-        res = _Repr.__green + fmt.format(*title) + '\033[0m\n'
+        res = theme['header_color'] + fmt.format(*title) + '\033[0m\n'
 
         for _task in tasks:
-            res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children)
+            res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children, theme)
 
         return res
 
@@ -280,8 +288,8 @@ class TaskList:
     def __repr__(self) -> str:
         return _Repr.repr(self)
 
-    def print(self, fields: List[str] = None, children=True):
-        return print(_Repr.repr(self, fields, children))
+    def print(self, fields: List[str] = None, children=True, theme=None):
+        return print(_Repr.repr(self, fields, children, theme))
 
 
 class UnmodifiableTaskList(TaskList):
@@ -595,12 +603,11 @@ class Task:
     def __repr__(self):
         return _Repr.repr([self])
 
-    def print(self, fields: List[str] = None, children=True):
-        return print(_Repr.repr([self], fields, children))
+    def print(self, fields: List[str] = None, children=True, theme=None):
+        return print(_Repr.repr([self], fields, children, theme))
 
 
 class WBS:
-
 
     def __init__(self, name=None, tasks: List[Task] = None, **kwargs):
         self.__root = Task(0, name, children=tasks)
@@ -701,5 +708,5 @@ class WBS:
     def __repr__(self):
         return _Repr.repr(self.roots)
 
-    def print(self, fields: List[str] = None, children=True):
-        return print(_Repr.repr(self.roots, fields, children))
+    def print(self, fields: List[str] = None, children=True, theme=None):
+        return print(_Repr.repr(self.roots, fields, children, theme))
