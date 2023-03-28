@@ -81,7 +81,7 @@ class TestWBS(TestCase):
         prj // Task(1, '1')
         prj // Task(2, '2')
 
-        prj.roots.move_before(prj(2), prj(1))
+        prj.roots.move(prj(2), before=prj(1))
         self.assertEqual(2, prj.roots[0].id)
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, len(prj.roots))
@@ -91,7 +91,7 @@ class TestWBS(TestCase):
         prj // Task(1, '1')
         prj // Task(2, '2')
 
-        prj.roots.move_after(prj(1), prj(2))
+        prj.roots.move(prj(1), after=prj(2))
         self.assertEqual(2, prj.roots[0].id)
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, len(prj.roots))

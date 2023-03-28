@@ -91,16 +91,12 @@ class TestTask(TestCase):
         self.assertEqual(2, len(t3.parents))
         self.assertEqual(2, t3.parents[0].id)
         self.assertEqual(1, t3.parents[1].id)
-        self.assertRaises(RuntimeError, lambda: t3.parents.remove(t2))
-        self.assertRaises(RuntimeError, lambda: t3.parents.append(t2))
 
     def test_parents_add_remove(self):
         t1 = Task(id=1, name='1')
         t2 = Task(id=2, name='2')
         t1.children.append(t2)
 
-        self.assertRaises(RuntimeError, lambda: t2.parents.remove(t1))
-        self.assertRaises(RuntimeError, lambda: t2.parents.append(t1))
 
     def test_children(self):
         t1 = Task(id=1, name='1')

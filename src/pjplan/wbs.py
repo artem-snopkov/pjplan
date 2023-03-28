@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import List, Optional, Union, Iterable
+from typing import List, Optional, Union, Iterable, Callable
 
 
 def _to_list(val: Union['Task', List['Task']]):
@@ -13,13 +13,13 @@ def _to_list(val: Union['Task', List['Task']]):
 
 
 class _Repr:
-    __red = '\033[91m'
-    __green = '\033[92m'
-    __yellow = '\033[93m'
-    __blue = '\033[94m'
-    __pink = '\033[95m'
-    __teal = '\033[96m'
-    __grey = '\033[97m'
+    __red = '91m'
+    __green = '92m'
+    __yellow = '93m'
+    __blue = '94m'
+    __pink = '95m'
+    __teal = '96m'
+    __grey = '97m'
 
     __DEFAULT_THEME = {
         'header_color': __green,
@@ -64,6 +64,10 @@ class _Repr:
         return max_len
 
     @staticmethod
+    def __colored(text, color):
+        return '\033[' + color + text + '\033[0m'
+
+    @staticmethod
     def __print_task_subtree(task: 'Task', fields: List[str], level, fmt, children, theme):
         values = []
         for f in fields:
@@ -72,10 +76,13 @@ class _Repr:
             else:
                 values.append(_Repr.__get_field_value(task, f))
 
-        colors = theme['level_colors']
-        color = colors[level] if level < len(colors) else _Repr.__grey
+        if 'print_color' in task.__dict__:
+            color = task.print_color
+        else:
+            colors = theme['level_colors']
+            color = colors[level] if level < len(colors) else _Repr.__grey
 
-        res = color + fmt.format(*values) + '\033[0m\n'
+        res = _Repr.__colored(fmt.format(*values), color) + '\n'
         if children:
             for ch in task.children:
                 res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children, theme)
@@ -105,7 +112,9 @@ class _Repr:
 
         title = [s.upper() for s in fields]
 
-        res = theme['header_color'] + fmt.format(*title) + '\033[0m\n'
+        color = theme['header_color'] if 'header_color' in theme else _Repr.__grey
+
+        res = _Repr.__colored(fmt.format(*title), color) + '\n'
 
         for _task in tasks:
             res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children, theme)
@@ -113,72 +122,49 @@ class _Repr:
         return res
 
 
-class TaskList:
+class ImmutableTaskList:
 
-    def __init__(self, _list: List['Task'], setter=None):
+    def __init__(self, _list: List['Task']):
         self.__list = _list
-        self.__setter = setter
 
     def __iter__(self):
         return iter(self.__list)
 
-    def append(self, task):
-        if task not in self.__list:
-            return self.__list.append(task)
-
-    def remove(self, item):
-        return self.__list.remove(item)
-
-    def insert(self, index: int, item: 'Task'):
-        return self.__list.insert(index, item)
-
-    def move_before(self, item: 'Task', before_item: 'Task'):
-        if item not in self.__list:
-            raise RuntimeError("Item not found")
-        if before_item not in self.__list:
-            raise RuntimeError("Before Item not found")
-
-        self.__list.remove(item)
-        self.__list.insert(self.__list.index(before_item), item)
-
-    def move_after(self, item: 'Task', before_item: 'Task'):
-        if item not in self.__list:
-            raise RuntimeError("Item not found")
-        if before_item not in self.__list:
-            raise RuntimeError("Before Item not found")
-
-        self.__list.remove(item)
-        self.__list.insert(self.__list.index(before_item) + 1, item)
-
-    def index(self, item: 'Task'):
-        return self.__list.index(item)
-
-    def remove_all(self, key=None, **kwargs) -> 'UnmodifiableTaskList':
-        tasks_to_delete = self(key, **kwargs)
-        if not tasks_to_delete:
-            return UnmodifiableTaskList([])
-
-        for t in tasks_to_delete:
-            t.parent = None
-            t.predecessors = []
-            t.successors = []
-
-        return tasks_to_delete
-
-    def copy(self):
-        return self.__list.copy()
+    def index(self, task: 'Task') -> int:
+        """
+        Returns index of task in list
+        :param task: task
+        :return: index in list
+        :raises RuntimeError if task does not exists in list
+        """
+        return self.__list.index(task)
 
     def __setattr__(self, key, value):
+        """
+        Set attribute to all tasks in list
+        :param key: attribute name
+        :param value: attribute value
+        :return:
+        """
         if key.find('__') > 0:
             super().__setattr__(key, value)
         else:
             for t in self:
                 t.__setattr__(key, value)
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """
+        Returns len of list
+        :return: len of list
+        """
         return len(self.__list)
 
     def __add__(self, other):
+        """
+        Concatenate this list with other
+        :param other: other task list
+        :return:
+        """
         vals = [v for v in other if v not in self.__list]
         return self.__list.__add__(vals)
 
@@ -188,16 +174,26 @@ class TaskList:
             return t.parent.id if t.parent else None
         return t.__getattribute__(attribute_name) if attribute_name in t.__dict__ else None
 
-    def __call__(self, key=None, **kwargs) -> Union[Optional['Task'], 'UnmodifiableTaskList']:
+    def __call__(
+            self,
+            key: Union[int, Callable[['Task'], bool]] = None,
+            **kwargs
+    ) -> Union[Optional['Task'], 'ImmutableTaskList']:
+        """
+        Search tasks in list
+        :param key: task id or Callable[[Task], bool] that implements filter
+        :param kwargs: task filters
+        :return: list of matched tasks
+        """
         if key is not None:
             if type(key) is int:
                 return next((t for t in self if t.id == key), None)
             if callable(key):
-                return UnmodifiableTaskList([t for t in self if key(t)])
-            raise RuntimeError("Unsupported arg type: " + type(key))
+                return ImmutableTaskList([t for t in self if key(t)])
+            raise RuntimeError(f"Unsupported key type: {type(key)}")
 
         if kwargs is None:
-            raise RuntimeError("Key and Kwargs are None")
+            return ImmutableTaskList([t for t in self.__list])
 
         def search(t, **kw):
             for k, v in kw.items():
@@ -237,37 +233,7 @@ class TaskList:
                     return False
             return True
 
-        return UnmodifiableTaskList([t for t in self if search(t, **kwargs)])
-
-    def sort(self, key, reverse=False) -> None:
-        if self.__setter is None:
-            raise RuntimeError("Unsupported operation")
-
-        if type(key) is str:
-            self.__list = sorted(self.__list, key=lambda x: x.__getattribute__(key), reverse=reverse)
-        elif type(key) is list or type(key) is tuple or type(key) is set:
-            self.__list = sorted(self.__list,
-                                 key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
-                                 reverse=reverse)
-        else:
-            raise RuntimeError("Unsupported key type", type(key))
-
-        self.__setter(self.__list)
-
-    def reorder(self, ids):
-        if self.__setter is None:
-            raise RuntimeError("Unsupported operation")
-
-        _all = self.__list.copy()
-
-        new_list = []
-        for _id in ids:
-            ch = next(t for t in self if t.id == _id)
-            new_list.append(ch)
-            _all.remove(ch)
-
-        self.__list = new_list + _all
-        self.__setter(self.__list)
+        return ImmutableTaskList([t for t in self if search(t, **kwargs)])
 
     def __lshift__(self, other: Union['Task', List['Task']]):
         for t in self:
@@ -288,16 +254,147 @@ class TaskList:
     def __repr__(self) -> str:
         return _Repr.repr(self)
 
-    def print(self, fields: List[str] = None, children=True, theme=None):
+    def print(self, fields: List[str] = None, children=True, theme: dict = None) -> None:
+        """
+        Print task sheet
+        :param fields: fields to print
+        :param children: show/hide child tasks
+        :param theme: color theme
+
+        Color theme specified by dict:
+        {
+            'header_color': '<header color>',
+            'level_colors': ['<level 0 color>', '<level 1 color>', ...]
+        }
+        """
         return print(_Repr.repr(self, fields, children, theme))
 
 
-class UnmodifiableTaskList(TaskList):
-    def append(self, task):
-        raise RuntimeError("Unsupported operation")
+class TaskList(ImmutableTaskList):
 
-    def remove(self, item):
-        raise RuntimeError("Unsupported operation")
+    def __init__(self, _list: List['Task'], setter=None):
+        super().__init__(_list)
+        self.__list = _list
+        self.__setter = setter
+
+    def __iter__(self):
+        return iter(self.__list)
+
+    def append(self, task: 'Task') -> bool:
+        """
+        Append task to the end of list if task not already in list
+        :param task: task
+        :return: True, if task added to list. False, if task already exists in list
+        """
+        if task not in self.__list:
+            self.__list.append(task)
+            return True
+        return False
+
+    def remove(self, task: 'Task') -> bool:
+        """
+        Remove task from list
+        :param task: task
+        :return: True, if task removed. False, if task does not exists in list
+        """
+        if task in self.__list:
+            self.__list.remove(task)
+            return True
+        return False
+
+    def insert(self, index: int, task: 'Task') -> bool:
+        """
+        Insert task before index
+        :param index: index
+        :param task: task
+        :return: True, if task added to list. False, if task already exists in list
+        """
+        if task not in self.__list:
+            self.__list.insert(index, task)
+            return True
+        return False
+
+    def move(self, task: 'Task', before: Optional['Task'] = None, after: Optional['Task'] = None) -> None:
+        """
+        Move task before or after another task
+        :param task: task to move
+        :param before: task
+        :param after: task
+        :raises RuntimeError if task/before/after does not exists in list
+        """
+        if task not in self.__list:
+            raise RuntimeError("'Task' not found in list")
+        if before is not None and before not in self.__list:
+            raise RuntimeError("'Before' not found in list")
+        if after is not None and after not in self.__list:
+            raise RuntimeError("After not found in list")
+        if before is not None and after is not None:
+            raise RuntimeError("'Before' and 'After' is not None. Only one parameter must be set")
+
+        self.__list.remove(task)
+        if before is not None:
+            self.__list.insert(self.__list.index(before), task)
+        elif after is not None:
+            self.__list.insert(self.__list.index(after) + 1, task)
+        else:
+            raise RuntimeError("'Before' or 'After' must be not None")
+
+    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'TaskList':
+        """
+        Remove all tasks matched to key from list
+        :param key: see __call__ for details
+        :param kwargs: see __call__ for details
+        :return: deleted tasks
+        """
+        tasks_to_delete = self(key, **kwargs)
+        if not tasks_to_delete:
+            return ImmutableTaskList([])
+
+        for t in tasks_to_delete:
+            t.parent = None
+            t.predecessors = []
+            t.successors = []
+
+        return tasks_to_delete
+
+    def sort(self, key: Union[str, List[str]], reverse=False) -> None:
+        """
+        Sort tasks in list ascending by specified attribute
+        :param key: attribute name or list of attribute names
+        :param reverse: reverse sort
+        """
+        if self.__setter is None:
+            raise RuntimeError("Unsupported operation")
+
+        if type(key) is str:
+            self.__list = sorted(self.__list, key=lambda x: x.__getattribute__(key), reverse=reverse)
+        elif type(key) is list or type(key) is tuple or type(key) is set:
+            self.__list = sorted(self.__list,
+                                 key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
+                                 reverse=reverse)
+        else:
+            raise RuntimeError(f"Unsupported key type {type(key)}")
+
+        self.__setter(self.__list)
+
+    def reorder(self, ids: List[int]) -> None:
+        """
+        Put tasks with specified ids on top of list in order, specified in ids
+        :param ids: list of task ids
+        """
+        if self.__setter is None:
+            raise RuntimeError("Unsupported operation")
+
+        _all = self.__list.copy()
+
+        new_list = []
+        for _id in ids:
+            ch = next(t for t in self if t.id == _id)
+            new_list.append(ch)
+            _all.remove(ch)
+
+        self.__list = new_list + _all
+        self.__setter(self.__list)
 
 
 class ChildrenList(TaskList):
@@ -309,8 +406,8 @@ class ChildrenList(TaskList):
     def append(self, task: 'Task'):
         task.parent = self.__parent
 
-    def remove(self, item: 'Task'):
-        item.parent = None
+    def remove(self, task: 'Task'):
+        task.parent = None
 
     def insert(self, index: int, task: 'Task'):
         super().insert(index, task)
@@ -325,10 +422,10 @@ class PredecessorsList(TaskList):
     def append(self, task: 'Task'):
         self.__parent.predecessors = [v for v in self.__parent.predecessors] + [task]
 
-    def remove(self, item: 'Task'):
-        self.__parent.predecessors = [v for v in self.__parent.predecessors if v != item]
+    def remove(self, task: 'Task'):
+        self.__parent.predecessors = [v for v in self.__parent.predecessors if v != task]
 
-    def insert(self, index: int, item: 'Task'):
+    def insert(self, index: int, task: 'Task'):
         raise RuntimeError("Unsupported operation")
 
 
@@ -340,10 +437,10 @@ class SuccessorsList(TaskList):
     def append(self, task: 'Task'):
         self.__parent.successors = [v for v in self.__parent.successors] + [task]
 
-    def remove(self, item: 'Task'):
-        self.__parent.successors = [v for v in self.__parent.successors if v != item]
+    def remove(self, task: 'Task'):
+        self.__parent.successors = [v for v in self.__parent.successors if v != task]
 
-    def insert(self, index: int, item: 'Task'):
+    def insert(self, index: int, task: 'Task'):
         raise RuntimeError("Unsupported operation")
 
 
@@ -429,9 +526,9 @@ class Task:
             value.__children.append(self)
 
     @property
-    def parents(self) -> UnmodifiableTaskList:
+    def parents(self) -> ImmutableTaskList:
         """Список родительских задач. Вычисляется рекурсивно вверх по дереву задач"""
-        return UnmodifiableTaskList(self.__get_all_parents())
+        return ImmutableTaskList(self.__get_all_parents())
 
     def __get_all_parents(self) -> List['Task']:
         def get_parent(t):
@@ -467,7 +564,7 @@ class Task:
     @property
     def all_children(self) -> TaskList:
         """Список всех дочерних задач. Вычисляется рекурсивно вниз по дереву задач"""
-        return UnmodifiableTaskList(self.__get_all_children())
+        return ImmutableTaskList(self.__get_all_children())
 
     def __get_all_children(self):
         def get_children(t):
@@ -497,9 +594,9 @@ class Task:
                 v.__successors.append(self)
 
     @property
-    def all_predecessors(self) -> TaskList:
+    def all_predecessors(self) -> ImmutableTaskList:
         """Список всех предшественников. Вычисляется рекурсивно по дереву предшественников"""
-        return UnmodifiableTaskList(self.__get_all_predecessors())
+        return ImmutableTaskList(self.__get_all_predecessors())
 
     def __get_all_predecessors(self):
         def get_predecessor(t):
@@ -510,7 +607,7 @@ class Task:
         return [t for t in get_predecessor(self)]
 
     @property
-    def successors(self) -> TaskList:
+    def successors(self) -> ImmutableTaskList:
         """Список прямых последователей"""
         return SuccessorsList(self, self.__successors)
 
@@ -529,9 +626,9 @@ class Task:
                 v.__predecessors.append(self)
 
     @property
-    def all_successors(self) -> TaskList:
+    def all_successors(self) -> ImmutableTaskList:
         """Список всех последователей. Вычисляется рекурсивно по дереву всех последователей"""
-        return UnmodifiableTaskList(self.__get_all_successors())
+        return ImmutableTaskList(self.__get_all_successors())
 
     def __get_all_successors(self):
         def get_successor(t):
