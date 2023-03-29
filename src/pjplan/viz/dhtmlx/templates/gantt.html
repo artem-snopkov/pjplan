@@ -44,7 +44,7 @@
             ],
             [
                 {unit: "month", format: "%M %y", step: 1},
-                {unit: "day", format: "%d.%m", step: 1}
+                {unit: "day", format: "%d", step: 1}
             ]
         ],
         useKey: "ctrlKey",
@@ -53,6 +53,8 @@
             return gantt.$$root.querySelector(".gantt_task");
         }
     });
+
+    gantt.ext.zoom.setLevel($scale)
 
     gantt.config.min_column_width = 20;
     gantt.config.auto_types = true;

@@ -25,13 +25,15 @@ class DhtmlxGantt:
             height=300,
             row_height=25,
             today_marker=True,
-            columns=None
+            columns=None,
+            scale: str = "day"
     ):
         self.wbs = wbs
         self.height = height
         self.row_height = row_height
         self.today_marker = today_marker
         self.columns = columns
+        self.scale = scale
 
     @staticmethod
     def __js(val):
@@ -127,8 +129,8 @@ class DhtmlxGantt:
                     'id': t.id,
                     'text': t.name,
                     'type': 'milestone' if t.milestone else 'task',
-                    'start_date': t.start.strftime("%d-%m-%Y"),
-                    'end_date': t.end.strftime("%d-%m-%Y"),
+                    'start_date': t.start.strftime("%d-%m-%Y %H:%M"),
+                    'end_date': t.end.strftime("%d-%m-%Y %H:%M"),
                     'resource': t.resource,
                     'open': t.gantt_open if 'gantt_open' in t.__dict__ else 'true',
                     'parent': t.parent.id if t.parent else 0,
@@ -166,11 +168,21 @@ class DhtmlxGantt:
 
         task_classes_def, task_classes = self.__task_classes()
 
+        if self.scale == 'day':
+            scale = 2
+        elif self.scale == 'month':
+            scale = 1
+        elif self.scale == 'year':
+            scale = 0
+        else:
+            scale = 3
+
         return Template(template).substitute(
             readonly='true',
             row_height=self.__js(self.row_height),
             today_marker=self.__js(self.today_marker),
             columns=self.__columns(),
+            scale=scale,
             task_classes_def=task_classes_def,
             gantt_data=self.__data(task_classes)
         )

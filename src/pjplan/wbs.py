@@ -45,7 +45,9 @@ class _Repr:
             return str(t.parent.id) if t.parent else ''
 
         if field not in t.__dict__:
-            return ''
+            field = field.lower()
+            if field not in t.__dict__:
+                return ''
 
         v = t.__getattribute__(field)
         if isinstance(v, datetime):
@@ -128,7 +130,7 @@ class ImmutableTaskList:
     """Immutable task list implementation"""
 
     def __init__(self, _list: List['Task']):
-        self.__list = _list
+        self._list = _list
 
     def index(self, task: 'Task') -> int:
         """
@@ -137,7 +139,7 @@ class ImmutableTaskList:
         :return: index in list
         :raises RuntimeError if task does not exists in list
         """
-        return self.__list.index(task)
+        return self._list.index(task)
 
     @staticmethod
     def __get_task_attribute(t: 'Task', attribute_name: str):
@@ -164,7 +166,7 @@ class ImmutableTaskList:
             raise RuntimeError(f"Unsupported key type: {type(key)}")
 
         if kwargs is None:
-            return ImmutableTaskList([t for t in self.__list])
+            return ImmutableTaskList([t for t in self._list])
 
         def search(t, **kw):
             for k, v in kw.items():
@@ -207,7 +209,7 @@ class ImmutableTaskList:
         return ImmutableTaskList([t for t in self if search(t, **kwargs)])
 
     def __iter__(self):
-        return iter(self.__list)
+        return iter(self._list)
 
     def __setattr__(self, key, value):
         """
@@ -216,10 +218,10 @@ class ImmutableTaskList:
         :param value: attribute value
         :return:
         """
-        if key.find('__') > 0:
+        if key.startswith('__') > 0 or key.startswith('_'):
             super().__setattr__(key, value)
         else:
-            for t in self:
+            for t in self._list:
                 t.__setattr__(key, value)
 
     def __len__(self) -> int:
@@ -227,7 +229,7 @@ class ImmutableTaskList:
         Returns len of list
         :return: len of list
         """
-        return len(self.__list)
+        return len(self._list)
 
     def __add__(self, other):
         """
@@ -235,8 +237,8 @@ class ImmutableTaskList:
         :param other: other task list
         :return:
         """
-        vals = [v for v in other if v not in self.__list]
-        return self.__list.__add__(vals)
+        vals = [v for v in other if v not in self._list]
+        return self._list.__add__(vals)
 
     def __lshift__(self, other: Union['Task', List['Task']]):
         for t in self:
@@ -249,10 +251,10 @@ class ImmutableTaskList:
         return other
 
     def __getitem__(self, query):
-        return self.__list.__getitem__(query)
+        return self._list.__getitem__(query)
 
     def __str__(self) -> str:
-        return self.__list.__str__()
+        return self._list.__str__()
 
     def __repr__(self) -> str:
         return _Repr.repr(self)
@@ -276,10 +278,8 @@ class ImmutableTaskList:
 class TaskList(ImmutableTaskList):
     """Mutable task list implementation"""
 
-    def __init__(self, _list: List['Task'], setter=None):
+    def __init__(self, _list: List['Task']):
         super().__init__(_list)
-        self.__list = _list
-        self.__setter = setter
 
     def append(self, task: 'Task') -> bool:
         """
@@ -287,8 +287,8 @@ class TaskList(ImmutableTaskList):
         :param task: task
         :return: True, if task added to list. False, if task already exists in list
         """
-        if task not in self.__list:
-            self.__list.append(task)
+        if task not in self._list:
+            self._list.append(task)
             return True
         return False
 
@@ -298,8 +298,8 @@ class TaskList(ImmutableTaskList):
         :param task: task
         :return: True, if task removed. False, if task does not exists in list
         """
-        if task in self.__list:
-            self.__list.remove(task)
+        if task in self._list:
+            self._list.remove(task)
             return True
         return False
 
@@ -310,8 +310,8 @@ class TaskList(ImmutableTaskList):
         :param task: task
         :return: True, if task added to list. False, if task already exists in list
         """
-        if task not in self.__list:
-            self.__list.insert(index, task)
+        if task not in self._list:
+            self._list.insert(index, task)
             return True
         return False
 
@@ -323,24 +323,24 @@ class TaskList(ImmutableTaskList):
         :param after: task
         :raises RuntimeError if task/before/after does not exists in list
         """
-        if task not in self.__list:
+        if task not in self._list:
             raise RuntimeError("'Task' not found in list")
-        if before is not None and before not in self.__list:
+        if before is not None and before not in self._list:
             raise RuntimeError("'Before' not found in list")
-        if after is not None and after not in self.__list:
+        if after is not None and after not in self._list:
             raise RuntimeError("After not found in list")
         if before is not None and after is not None:
             raise RuntimeError("'Before' and 'After' is not None. Only one parameter must be set")
 
-        self.__list.remove(task)
+        self._list.remove(task)
         if before is not None:
-            self.__list.insert(self.__list.index(before), task)
+            self._list.insert(self._list.index(before), task)
         elif after is not None:
-            self.__list.insert(self.__list.index(after) + 1, task)
+            self._list.insert(self._list.index(after) + 1, task)
         else:
             raise RuntimeError("'Before' or 'After' must be not None")
 
-    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'TaskList':
+    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'ImmutableTaskList':
         """
         Remove all tasks matched to key from list
         :param key: see __call__ for details
@@ -358,6 +358,27 @@ class TaskList(ImmutableTaskList):
 
         return tasks_to_delete
 
+
+class ChildrenList(TaskList):
+
+    def __init__(self, parent: 'Task', _list, _setter):
+        super().__init__(_list)
+        self.__parent = parent
+        self.__setter = _setter
+
+    def append(self, task: 'Task'):
+        task.parent = self.__parent
+
+    def remove(self, task: 'Task') -> bool:
+        if task not in self._list:
+            return False
+        task.parent = None
+        return True
+
+    def insert(self, index: int, task: 'Task'):
+        super().insert(index, task)
+        task.parent = self.__parent
+
     def sort(self, key: Union[str, List[str]], reverse=False) -> None:
         """
         Sort tasks in list ascending by specified attribute
@@ -368,15 +389,15 @@ class TaskList(ImmutableTaskList):
             raise RuntimeError("Unsupported operation")
 
         if type(key) is str:
-            self.__list = sorted(self.__list, key=lambda x: x.__getattribute__(key), reverse=reverse)
+            self._list = sorted(self._list, key=lambda x: x.__getattribute__(key), reverse=reverse)
         elif type(key) is list or type(key) is tuple or type(key) is set:
-            self.__list = sorted(self.__list,
+            self._list = sorted(self._list,
                                  key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
                                  reverse=reverse)
         else:
             raise RuntimeError(f"Unsupported key type {type(key)}")
 
-        self.__setter(self.__list)
+        self.__setter(self._list)
 
     def reorder(self, ids: List[int]) -> None:
         """
@@ -386,7 +407,7 @@ class TaskList(ImmutableTaskList):
         if self.__setter is None:
             raise RuntimeError("Unsupported operation")
 
-        _all = self.__list.copy()
+        _all = self._list.copy()
 
         new_list = []
         for _id in ids:
@@ -394,25 +415,8 @@ class TaskList(ImmutableTaskList):
             new_list.append(ch)
             _all.remove(ch)
 
-        self.__list = new_list + _all
-        self.__setter(self.__list)
-
-
-class ChildrenList(TaskList):
-
-    def __init__(self, parent: 'Task', _list, _setter):
-        super().__init__(_list, _setter)
-        self.__parent = parent
-
-    def append(self, task: 'Task'):
-        task.parent = self.__parent
-
-    def remove(self, task: 'Task'):
-        task.parent = None
-
-    def insert(self, index: int, task: 'Task'):
-        super().insert(index, task)
-        task.parent = self.__parent
+        self._list = new_list + _all
+        self.__setter(self._list)
 
 
 class PredecessorsList(TaskList):
@@ -423,8 +427,11 @@ class PredecessorsList(TaskList):
     def append(self, task: 'Task'):
         self.__parent.predecessors = [v for v in self.__parent.predecessors] + [task]
 
-    def remove(self, task: 'Task'):
+    def remove(self, task: 'Task') -> bool:
+        if task not in self._list:
+            return False
         self.__parent.predecessors = [v for v in self.__parent.predecessors if v != task]
+        return True
 
     def insert(self, index: int, task: 'Task'):
         raise RuntimeError("Unsupported operation")
@@ -438,8 +445,11 @@ class SuccessorsList(TaskList):
     def append(self, task: 'Task'):
         self.__parent.successors = [v for v in self.__parent.successors] + [task]
 
-    def remove(self, task: 'Task'):
+    def remove(self, task: 'Task') -> bool:
+        if task not in self._list:
+            return False
         self.__parent.successors = [v for v in self.__parent.successors if v != task]
+        return True
 
     def insert(self, index: int, task: 'Task'):
         raise RuntimeError("Unsupported operation")
@@ -756,6 +766,9 @@ class WBS:
         return self.__root.children.append(task)
 
     def __remove(self, task_to_remove: Task, current: Task):
+        if task_to_remove is None:
+            return False
+
         if current.children.remove(task_to_remove):
             return True
 
@@ -770,6 +783,9 @@ class WBS:
         Remove task from WBS
         :param task:
         """
+        if not isinstance(task, Task):
+            raise RuntimeError(f'{type(task)} is not Task')
+
         return self.__remove(task, self.__root)
 
     def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs):

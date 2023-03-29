@@ -72,6 +72,13 @@ class TestTask(TestCase):
         self.assertEqual(t1.id, t2.parent.id)
         self.assertEqual(t1, t3.parent)
 
+    def test_children_index(self):
+        t2 = Task(id=2, name='2')
+        t3 = Task(id=3, name='3')
+        t1 = Task(id=1, name='1', children=[t2, t3])
+
+        self.assertEquals(1, t1.children.index(t3))
+
     def test_children_set(self):
         t2 = Task(id=2, name='2')
         t3 = Task(id=3, name='3')

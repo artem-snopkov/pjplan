@@ -95,3 +95,10 @@ class TestWBS(TestCase):
         self.assertEqual(2, prj.roots[0].id)
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, len(prj.roots))
+
+    def test_remove(self):
+        prj = WBS()
+        prj // Task(1, '1')
+        prj // Task(2, '2')
+
+        self.assertTrue(prj.remove(prj(2)))
