@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional, Union, Iterable, Callable
 
 
-def _to_list(val: Union['Task', List['Task']]):
+def _to_list(val: Union['Task', List['Task']]) -> List['Task']:
     if type(val) is Task:
         return [val]
     elif type(val) is list or type(val) is tuple or type(val) is set:
@@ -13,6 +13,8 @@ def _to_list(val: Union['Task', List['Task']]):
 
 
 class _Repr:
+    """Utility class for print task sheets"""
+
     __red = '91m'
     __green = '92m'
     __yellow = '93m'
@@ -123,12 +125,10 @@ class _Repr:
 
 
 class ImmutableTaskList:
+    """Immutable task list implementation"""
 
     def __init__(self, _list: List['Task']):
         self.__list = _list
-
-    def __iter__(self):
-        return iter(self.__list)
 
     def index(self, task: 'Task') -> int:
         """
@@ -138,35 +138,6 @@ class ImmutableTaskList:
         :raises RuntimeError if task does not exists in list
         """
         return self.__list.index(task)
-
-    def __setattr__(self, key, value):
-        """
-        Set attribute to all tasks in list
-        :param key: attribute name
-        :param value: attribute value
-        :return:
-        """
-        if key.find('__') > 0:
-            super().__setattr__(key, value)
-        else:
-            for t in self:
-                t.__setattr__(key, value)
-
-    def __len__(self) -> int:
-        """
-        Returns len of list
-        :return: len of list
-        """
-        return len(self.__list)
-
-    def __add__(self, other):
-        """
-        Concatenate this list with other
-        :param other: other task list
-        :return:
-        """
-        vals = [v for v in other if v not in self.__list]
-        return self.__list.__add__(vals)
 
     @staticmethod
     def __get_task_attribute(t: 'Task', attribute_name: str):
@@ -235,6 +206,38 @@ class ImmutableTaskList:
 
         return ImmutableTaskList([t for t in self if search(t, **kwargs)])
 
+    def __iter__(self):
+        return iter(self.__list)
+
+    def __setattr__(self, key, value):
+        """
+        Set attribute to all tasks in list
+        :param key: attribute name
+        :param value: attribute value
+        :return:
+        """
+        if key.find('__') > 0:
+            super().__setattr__(key, value)
+        else:
+            for t in self:
+                t.__setattr__(key, value)
+
+    def __len__(self) -> int:
+        """
+        Returns len of list
+        :return: len of list
+        """
+        return len(self.__list)
+
+    def __add__(self, other):
+        """
+        Concatenate this list with other
+        :param other: other task list
+        :return:
+        """
+        vals = [v for v in other if v not in self.__list]
+        return self.__list.__add__(vals)
+
     def __lshift__(self, other: Union['Task', List['Task']]):
         for t in self:
             t.predecessors += _to_list(other)
@@ -271,14 +274,12 @@ class ImmutableTaskList:
 
 
 class TaskList(ImmutableTaskList):
+    """Mutable task list implementation"""
 
     def __init__(self, _list: List['Task'], setter=None):
         super().__init__(_list)
         self.__list = _list
         self.__setter = setter
-
-    def __iter__(self):
-        return iter(self.__list)
 
     def append(self, task: 'Task') -> bool:
         """
@@ -379,7 +380,7 @@ class TaskList(ImmutableTaskList):
 
     def reorder(self, ids: List[int]) -> None:
         """
-        Put tasks with specified ids on top of list in order, specified in ids
+        Put tasks with specified ids on top of list in order
         :param ids: list of task ids
         """
         if self.__setter is None:
@@ -446,12 +447,12 @@ class SuccessorsList(TaskList):
 
 class Task:
     """
-    Task - задача, элемент WBS (Work Breakdown Structure), вершина графа задач.
-    Задача связана с другими задачами одним из четырех отношений:
-    1. parent (родительская задача). Может быть только один.
-    2. children (дочерние задачи)
-    3. predecessor (предшественники)
-    4. successor (последователи)
+    Task is a base Work Burndown Structure (WBS) element. A node in tasks graph.
+    Tasks are connected in several ways:
+    1. parent
+    2. children
+    3. predecessor
+    4. successor
     """
 
     def __init__(
@@ -471,20 +472,19 @@ class Task:
             **kwargs
     ):
         """
-        Конструктор
-        :param id: идентификатор задачи
-        :param name: название задачи
-        :param resource: ресурс, требуемый для выполнения задачи
-        :param start: дата начала выполнения задачи
-        :param end: дата окончания выполнения задачи
-        :param milestone: флаг, определяющий, является ли задача контрольной точкой проекта
-        :param estimate: оценка объема ресурса, требуемого для выполнения задачи
-        :param spent: оценка потраченного к настоящему времени на задачу объема ресурса
-        :param parent: родительская задача
-        :param children: дочерние задачи
-        :param predecessors: задачи предшественники
-        :param successors: задачи-последователи
-        :param kwargs: дополнительные атрибуты задачи
+        :param id: task id, unique in task graph
+        :param name: task name
+        :param resource: resource name (person, machine, etc.), necessary to perform task
+        :param start: task start date
+        :param end: task end date
+        :param milestone: is task milestone or not
+        :param estimate: task estimation in hours
+        :param spent: task completed work in hours
+        :param parent: parent task
+        :param children: children tasks
+        :param predecessors: predecessor tasks
+        :param successors: successor tasks
+        :param kwargs: additional task attributes
         """
         self.id = id
         self.name = name
@@ -512,7 +512,7 @@ class Task:
 
     @property
     def parent(self) -> 'Task':
-        """Родительская задача"""
+        """Parent task"""
         return self.__parent
 
     @parent.setter
@@ -527,7 +527,7 @@ class Task:
 
     @property
     def parents(self) -> ImmutableTaskList:
-        """Список родительских задач. Вычисляется рекурсивно вверх по дереву задач"""
+        """List of all parent tasks in hierarchy"""
         return ImmutableTaskList(self.__get_all_parents())
 
     def __get_all_parents(self) -> List['Task']:
@@ -543,7 +543,7 @@ class Task:
 
     @property
     def children(self) -> ChildrenList:
-        """Список дочерних задач"""
+        """List of direct children tasks"""
         return ChildrenList(self, self.__children, self.__set_children)
 
     @children.setter
@@ -562,8 +562,8 @@ class Task:
             v.parent = self
 
     @property
-    def all_children(self) -> TaskList:
-        """Список всех дочерних задач. Вычисляется рекурсивно вниз по дереву задач"""
+    def all_children(self) -> ImmutableTaskList:
+        """List of all children tasks: direct children, children of direct children etc."""
         return ImmutableTaskList(self.__get_all_children())
 
     def __get_all_children(self):
@@ -575,8 +575,8 @@ class Task:
         return [t for t in get_children(self)]
 
     @property
-    def predecessors(self) -> TaskList:
-        """Список прямых предшественников"""
+    def predecessors(self) -> PredecessorsList:
+        """List of direct predecessors"""
         return PredecessorsList(self, self.__predecessors)
 
     @predecessors.setter
@@ -595,7 +595,7 @@ class Task:
 
     @property
     def all_predecessors(self) -> ImmutableTaskList:
-        """Список всех предшественников. Вычисляется рекурсивно по дереву предшественников"""
+        """List of all predecessors: direct predecessors, predecessors of direct predecessors etc."""
         return ImmutableTaskList(self.__get_all_predecessors())
 
     def __get_all_predecessors(self):
@@ -607,8 +607,8 @@ class Task:
         return [t for t in get_predecessor(self)]
 
     @property
-    def successors(self) -> ImmutableTaskList:
-        """Список прямых последователей"""
+    def successors(self) -> SuccessorsList:
+        """List of direct successors"""
         return SuccessorsList(self, self.__successors)
 
     @successors.setter
@@ -627,7 +627,7 @@ class Task:
 
     @property
     def all_successors(self) -> ImmutableTaskList:
-        """Список всех последователей. Вычисляется рекурсивно по дереву всех последователей"""
+        """List of all successors: direct successors, successors of direct successors, etc."""
         return ImmutableTaskList(self.__get_all_successors())
 
     def __get_all_successors(self):
@@ -645,6 +645,7 @@ class Task:
         return d
 
     def clone(self, **kwargs) -> 'Task':
+        """Creates copy of this task"""
         cloned = Task(id=self.id, name=self.name)
 
         keys_to_gnore = {'_Task__parent', '_Task__children', '_Task__predecessors', '_Task__successors'}
@@ -659,29 +660,17 @@ class Task:
         return cloned
 
     def __floordiv__(self, other: Union['Task', List['Task']]):
-        """
-        Синоним children.append(other) и childred += other
-        :param other: задача или список задач
-        :return: other
-        """
+        """Synonym for children.append(other) and childred += other"""
         self.children += _to_list(other)
         return other
 
     def __lshift__(self, other: Union['Task', List['Task']]):
-        """
-        Синоним predecessors.append(other) или predecessors += other
-        :param other: задача или список задач
-        :return: other
-        """
+        """Synonym for predecessors.append(other) and predecessors += other"""
         self.predecessors += _to_list(other)
         return other
 
     def __rshift__(self, other: Union['Task', List['Task']]):
-        """
-        Синоним successors.append(other) или successors += other
-        :param other: задача или список задач
-        :return: other
-        """
+        """Synonym for successors.append(other) или successors += other"""
         self.successors += _to_list(other)
         return other
 
@@ -701,18 +690,36 @@ class Task:
         return _Repr.repr([self])
 
     def print(self, fields: List[str] = None, children=True, theme=None):
+        """
+        Print task
+        :param fields: fields to print
+        :param children: show/hide child tasks
+        :param theme: color theme
+
+        Color theme specified by dict:
+        {
+          'header_color': '<header color>',
+          'level_colors': ['<level 0 color>', '<level 1 color>', ...]
+        }
+        """
         return print(_Repr.repr([self], fields, children, theme))
 
 
 class WBS:
+    """Work Burndown Structure, Project"""
 
     def __init__(self, name=None, tasks: List[Task] = None, **kwargs):
-        self.__root = Task(0, name, children=tasks)
-        for k, v in kwargs.items():
-            self.__setattr__(k, v)
+        """
+        Constructor
+        :param name: name of project
+        :param tasks: list of tasks
+        :param kwargs: any additional WBS arguments
+        """
+        self.__root = Task(0, name, children=tasks, **kwargs)
 
     @property
     def name(self):
+        """Name of WBS"""
         return self.__root.name
 
     @name.setter
@@ -721,6 +728,7 @@ class WBS:
 
     @property
     def roots(self):
+        """List of all root tasks in WBS"""
         return self.__root.children
 
     @roots.setter
@@ -729,23 +737,57 @@ class WBS:
 
     @property
     def start(self):
-        starts = [t.start for t in self.__root.children if t.start is not None]
+        """Returns min start date from all tasks in WBS"""
+        starts = [t.start for t in self.roots if t.start is not None]
         if len(starts):
             return min(starts)
         return None
 
     @property
     def end(self):
+        """Returns max end date from all tasks in WBS"""
         ends = [t.end for t in self.__root.children if t.end is not None]
         if len(ends):
             return max(ends)
         return None
 
-    def remove(self, item):
-        self.__root.all_children.remove(item)
+    def append(self, task: Task) -> bool:
+        """Append task to root of WBS"""
+        return self.__root.children.append(task)
 
-    def remove_all(self, key=None, **kwargs):
-        return self.__root.all_children.remove_all(key, **kwargs)
+    def __remove(self, task_to_remove: Task, current: Task):
+        if current.children.remove(task_to_remove):
+            return True
+
+        for ch in current.children:
+            if self.__remove(task_to_remove, ch):
+                return True
+
+        return False
+
+    def remove(self, task: Task) -> bool:
+        """
+        Remove task from WBS
+        :param task:
+        """
+        return self.__remove(task, self.__root)
+
+    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs):
+        """
+        Remove all tasks matched to key from WBS.
+        :param key: see TaskList.remove_all for details
+        :param kwargs: see TaskList.remove_all for details
+        :return: list of deleted tasks
+        """
+        tasks_to_delete = self(key, **kwargs)
+
+        if not tasks_to_delete:
+            return ImmutableTaskList([])
+
+        for t in tasks_to_delete:
+            self.__remove(t, self.__root)
+
+        return tasks_to_delete
 
     def __len__(self):
         return len(self.__root.all_children)
@@ -769,17 +811,13 @@ class WBS:
         pass
 
     def clone(self) -> 'WBS':
-        """
-        Клонирует WBS - список дочерних задач и всех связанных с ними задач
-        :return: клон WBS
-        """
+        """Returns copy of this WBS."""
         all_tasks = {task.id: task for task in self.__root.all_children + [self.__root]}
 
         cloned_tasks = {task.id: task.clone() for task in all_tasks.values()}
 
-        # У задач в списке all_tasks могут быть predecessors или successors вне графа задач
-        # (например, из другого проекта). При клонировании эти задачи клонироваться не должны.
-        # Добавляем их в cloned_tasks как есть.
+        # Some tasks in WBS can have predecessors or successors outside WBS (i.e. from another project).
+        # This predecessors/successors should not be copied.
         for t in all_tasks.values():
             for pr in t.predecessors:
                 cloned_tasks.setdefault(pr.id, pr)
@@ -806,4 +844,16 @@ class WBS:
         return _Repr.repr(self.roots)
 
     def print(self, fields: List[str] = None, children=True, theme=None):
+        """
+        Print task sheet
+        :param fields: fields to print
+        :param children: show/hide child tasks
+        :param theme: color theme
+
+        Color theme specified by dict:
+        {
+          'header_color': '<header color>',
+          'level_colors': ['<level 0 color>', '<level 1 color>', ...]
+        }
+        """
         return print(_Repr.repr(self.roots, fields, children, theme))
