@@ -195,7 +195,7 @@ class DefaultScheduler(IScheduler):
         for t in all_tasks.values():
             for pr in t.predecessors:
                 if pr.id not in all_tasks and (not pr.start or not pr.end):
-                    raise RuntimeError(f"Task {t.id} ({t.name}) has predecessor {pr.id} ({pr.name}) w/o dates outside wbs")
+                    raise RuntimeError(f"Task {t.id} ({t.name}) has predecessor {pr.id} ({pr.name}) w/o dates and outside wbs")
 
     def __check_loops(self, project: WBS):
         validated = set()

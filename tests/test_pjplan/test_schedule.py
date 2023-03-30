@@ -1,9 +1,8 @@
 from datetime import datetime
 from unittest import TestCase
 
-import pjplan
 import pjplan as pl
-from pjplan import Task, WBS, GenericCalendar
+from pjplan import Task, WBS
 
 
 class TestDefaultScheduler(TestCase):
