@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional, Iterable
 
 from pjplan import Task, WBS
-from pjplan.io.raw import TaskRaw, raws_to_tasks, tasks_to_raws
+from pjplan.io.raw import TaskRaw, raws_to_wbs, tasks_to_raws
 
 __DATE_FORMAT = '%d.%m.%y'
 
@@ -84,7 +84,7 @@ def read_csv(path: str, encoding='utf-8', delimiter=';') -> WBS:
                 )
             )
 
-    return WBS(tasks=raws_to_tasks(raws))
+    return raws_to_wbs(raws)
 
 
 def write_csv(wbs: WBS, path: str, encoding='utf-8', delimiter=';'):
@@ -99,6 +99,7 @@ def write_csv(wbs: WBS, path: str, encoding='utf-8', delimiter=';'):
                     fields[k] = type(v).__name__
         field_list = [f"{k}" for k in fields.keys()]
         csvwriter.writerow(__DEFAULT_FIELDS + field_list)
+
         for task in raws:
             csvwriter.writerow([
                 task.id,
@@ -112,5 +113,5 @@ def write_csv(wbs: WBS, path: str, encoding='utf-8', delimiter=';'):
                 task.parent_id,
                 ';'.join([str(pid) for pid in task.predecessor_ids])
             ] + [
-                task.__getattribute__(k) if k in task.__dict__ else '' for k in field_list
+                task.__getattribute__(k) if k in task.__dict__ and not k.startswith('_') else '' for k in field_list
             ])

@@ -53,16 +53,36 @@ class TestWBS(TestCase):
         self.assertEqual('1', wbs(3).resource)
 
     def test_clone(self):
-
-        prj = WBS('0')
-        t1 = prj // Task(1, '1')
-        t2 = prj // Task(2, '2')
+        prj = WBS()
+        with prj // Task(1, "1") as first:
+            with first // Task(2, "2", start=datetime.now(), end=datetime(2022, 11, 1)) as second:
+                second // Task(3, "3", start=datetime(2022, 11, 1), end=datetime(2022, 12, 1), resource='Test')
 
         prj2 = prj.clone()
         prj2(1).name = 'n1'
 
-        self.assertEqual('1', t1.name)
-        self.assertEqual(2, len(prj2.roots))
+        self.assertEqual('1', prj(1).name)
+        self.assertEqual(1, len(prj2.roots))
+        self.assertEqual(len(prj), len(prj2))
+        self.assertIsNotNone(prj2(1))
+        self.assertIsNotNone(prj2(2))
+        self.assertIsNotNone(prj2(3))
+
+    def test_append(self):
+        prj = WBS()
+        prj // Task(1)
+
+        self.assertEqual(1, len(prj))
+
+    def test_append_duplicate_id(self):
+        prj = WBS()
+        prj // Task(1)
+        self.assertEqual(1, len(prj))
+        self.assertRaises(RuntimeError, lambda: prj // Task(1))
+
+    def test_append_duplicate_ids(self):
+        prj = WBS()
+        self.assertRaises(RuntimeError, lambda: prj // [Task(1), Task(1)])
 
     def test_insert(self):
         prj = WBS()
@@ -75,6 +95,73 @@ class TestWBS(TestCase):
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, prj.roots[2].id)
         self.assertEqual(3, len(prj.roots))
+
+    def test_set_children_hidden_remove_1(self):
+        prj = WBS()
+        prj // Task(1)
+        prj // Task(2)
+
+        prj.roots = [prj(1)]
+
+        self.assertEqual(1, len(prj))
+        self.assertEqual(1, prj[0].id)
+
+    def test_children_set_parent(self):
+        with WBS() as prj:
+            with prj // Task(1) as t1:
+                t1 // Task(2)
+                with t1 // Task(3) as t3:
+                    t3 // Task(4)
+                    t3 // Task(5)
+
+        prj.roots[0].children.parent = None
+        self.assertIsNone(prj(1).parent)
+        self.assertIsNone(prj(2).parent)
+        self.assertIsNone(prj(3).parent)
+
+    def test_set_parent_none(self):
+        prj = WBS()
+        t1 = prj // Task(1)
+        t2 = t1 // Task(2)
+
+        self.assertEqual(1, len(prj.roots))
+
+        t2.parent = None
+        self.assertEqual(2, len(prj.roots))
+
+    def test_set_parent(self):
+        wbs = WBS()
+        t1 = wbs // Task(1)
+
+        Task(2).parent = t1
+
+        self.assertEqual(2, len(wbs))
+        self.assertEqual(2, wbs(2).id)
+
+    def test_set_parent_outside_wbs(self):
+        wbs1 = WBS()
+        t1 = wbs1 // Task(1)
+
+        wbs2 = WBS()
+        t2 = wbs2 // Task(2)
+
+        try:
+            t2.parent = t1
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
+
+    def test_set_parent_duplicate_id(self):
+        wbs = WBS()
+        t1 = wbs // Task(1)
+
+        t2 = Task(1)
+
+        try:
+            t2.parent = t1
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
 
     def test_move_before(self):
         prj = WBS()
@@ -102,3 +189,74 @@ class TestWBS(TestCase):
         prj // Task(2, '2')
 
         self.assertTrue(prj.remove(prj(2)))
+        self.assertEqual(1, len(prj))
+
+    def test_detached_2(self):
+        with WBS() as prj0:
+            t1 = prj0 // Task(2)
+
+        # Detached task
+        t2 = Task(1, predecessors=[t1])
+
+        self.assertEqual(1, len(t2.predecessors))
+
+        # Attach task
+        prj0 // t2
+
+        self.assertEqual(1, len(t2.predecessors))
+        self.assertEqual(1, len(t1.successors))
+
+    def test_detached_3(self):
+        with WBS() as prj0:
+            t1 = prj0 // Task(2)
+
+        try:
+            t1.parent = Task(1)
+            self.fail()
+        except RuntimeError:
+            pass
+
+    def test_detached_6(self):
+        t1 = Task(1)
+        t1 // Task(2)
+
+        wbs = WBS()
+        wbs.append(t1)
+
+        self.assertEqual(1, len(wbs.roots))
+        self.assertEqual(2, len(wbs))
+        self.assertEqual(1, wbs(2).parent.id)
+
+    def test_detached_7(self):
+        t1 = WBS() // Task(1)
+
+        self.assertRaises(RuntimeError, lambda: WBS().append(t1))
+
+    def test_subtree(self):
+        with WBS() as wbs:
+            wbs // Task(1)
+            with wbs // Task(2) as t2:
+                t3 = t2 // Task(3)
+                t4 = t2 // Task(4)
+            with wbs // Task(5) as t5:
+                t6 = t5 // Task(6, predecessors=[t3])
+                t5 // Task(7, predecessors=[t6])
+
+        subtree = wbs.subtree(wbs(id_in_=[2, 5]))
+
+        self.assertEqual(6, len(subtree))
+
+        self.assertEqual(subtree, subtree(2).wbs)
+        self.assertEqual(subtree, subtree(3).wbs)
+        self.assertEqual(subtree, subtree(4).wbs)
+        self.assertEqual(subtree, subtree(5).wbs)
+        self.assertEqual(subtree, subtree(6).wbs)
+        self.assertEqual(subtree, subtree(7).wbs)
+
+        self.assertEqual(subtree(3), subtree(6).predecessors[0])
+        self.assertEqual(subtree(6), subtree(7).predecessors[0])
+
+        self.assertEqual(subtree, subtree(6).predecessors[0].wbs)
+        self.assertEqual(subtree, subtree(7).predecessors[0].wbs)
+
+

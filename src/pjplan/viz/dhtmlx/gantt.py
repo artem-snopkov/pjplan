@@ -133,7 +133,7 @@ class DhtmlxGantt:
                     'end_date': t.end.strftime("%d-%m-%Y %H:%M"),
                     'resource': t.resource,
                     'open': t.gantt_open if 'gantt_open' in t.__dict__ else 'true',
-                    'parent': t.parent.id if t.parent else 0,
+                    'parent': t.parent.id if t.parent and t.parent in self.wbs else 0,
                     'progress': progress,
                     'css_class': task_classes.get(t.id)
                 }

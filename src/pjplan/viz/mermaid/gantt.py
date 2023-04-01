@@ -19,7 +19,7 @@ class MermaidGantt:
         self.wbs = wbs
         self.weekends = weekends
         self.tick_interval = tick_interval
-        self.title: str = title if title else wbs.name
+        self.title: str = title if title else None
         self.height = height
 
     @staticmethod

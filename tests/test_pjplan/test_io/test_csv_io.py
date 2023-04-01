@@ -17,7 +17,7 @@ class TestCsvIO(TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        # shutil.rmtree(cls.TEST_DIR)
+        shutil.rmtree(cls.TEST_DIR)
         pass
 
     def assertTasksEqual(self, t1, t2):
@@ -30,6 +30,8 @@ class TestCsvIO(TestCase):
         self.assertEqual(t1.milestone, t2.milestone)
 
         for k, v in t1.__dict__.items():
+            if k.startswith('_'):
+                continue
             self.assertTrue(k in t2.__dict__, f"{k} attr not found")
             self.assertEqual(t1.__getattribute__(k), t2.__getattribute__(k), f"{k} are not equals")
 
@@ -55,7 +57,7 @@ class TestCsvIO(TestCase):
         self.assertTasksEqual(t1, r(1))
 
         self.assertTasksEqual(t2, r(2))
-        self.assertTrue(r(2) in p(1).children)
+        self.assertTrue(r(2) in r(1).children)
         self.assertTrue(r(1) == r(2).parent)
 
         self.assertTasksEqual(t3, r(3))

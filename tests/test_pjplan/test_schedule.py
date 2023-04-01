@@ -8,7 +8,7 @@ from pjplan import Task, WBS
 class TestDefaultScheduler(TestCase):
 
     def test_calc_1(self):
-        p = WBS("project")
+        p = WBS()
         with p // Task(1, "1") as first:
             with first // Task(2, "2", start=datetime.now(), end=datetime(2022, 11, 1)) as second:
                 second // Task(3, "3", start=datetime(2022, 11, 1), end=datetime(2022, 12, 1), resource='Test')
@@ -30,8 +30,6 @@ class TestDefaultScheduler(TestCase):
         p // Task(2, estimate=16, resource='default')
 
         s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
-
-        print(usage.usage('default'))
 
         self.assertEqual(datetime(2025, 1, 1), s(1).start)
         self.assertEqual(datetime(2025, 1, 2, 6), s(1).end)
@@ -76,14 +74,6 @@ class TestDefaultScheduler(TestCase):
         self.assertEqual(datetime(2025, 1, 1), s(2).start)
         self.assertEqual(datetime(2025, 1, 2), s(1).start)
 
-    def test_validate_isolation(self):
-        p = WBS("test")
-        t1 = p // Task(1, '1')
-
-        t1 << Task(2, '2')
-
-        self.assertRaises(RuntimeError, lambda: pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p))
-
     def test_loops(self):
         p = WBS()
         t1 = p // Task(1, '1')
@@ -95,18 +85,3 @@ class TestDefaultScheduler(TestCase):
         t3.successors.append(t1)
 
         self.assertRaises(RuntimeError, lambda: pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p))
-
-    def test_calc_several_projects(self):
-        # Есть проект с расписанием
-        p1 = WBS("p1")
-        t1 = p1 // Task(1, "1", start=datetime(2025, 1, 1), end=datetime(2025, 1, 10))
-
-        # Создаем новый проект, задачи которого зависят от задач первого проекта
-        p2 = WBS("p2")
-        t2 = p2 // Task(2, "2", estimate=8, spent=8)
-        t2.predecessors.append(t1)
-
-        # Строим расписание нового проекта
-        s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p2)
-
-        self.assertEqual(datetime(2025, 1, 10), s(2).start)

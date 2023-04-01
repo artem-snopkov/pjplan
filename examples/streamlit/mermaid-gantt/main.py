@@ -32,7 +32,7 @@ def page(project: WBS):
 
 
 if __name__ == '__main__':
-    with WBS('Test project') as prj:
+    with WBS() as prj:
         prj // Task(1, 'Task 1', estimate=40, resource='Tester')
         prj // Task(2, 'Task 2', predecessors=[prj(1)], estimate=20, resource='Tester')
         with prj // Task(3, 'Task 3') as t:

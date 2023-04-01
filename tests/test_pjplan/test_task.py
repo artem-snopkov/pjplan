@@ -1,7 +1,7 @@
 from datetime import datetime
 from unittest import TestCase
 
-from pjplan import Task
+from pjplan import Task, WBS
 
 
 class TestTask(TestCase):
@@ -14,7 +14,6 @@ class TestTask(TestCase):
         self.assertEqual(t.name, t1.name)
 
         t1.start = datetime.now()
-        print(t.__dict__.keys())
 
     def test_parent_in_init(self):
         """При указании parent в конструкторе у него автоматом проставляются children"""
@@ -77,7 +76,7 @@ class TestTask(TestCase):
         t3 = Task(id=3, name='3')
         t1 = Task(id=1, name='1', children=[t2, t3])
 
-        self.assertEquals(1, t1.children.index(t3))
+        self.assertEqual(1, t1.children.index(t3))
 
     def test_children_set(self):
         t2 = Task(id=2, name='2')
@@ -88,6 +87,16 @@ class TestTask(TestCase):
 
         self.assertIsNone(t3.parent)
 
+    def test_children_set_duplicate_ids(self):
+        t2 = Task(2)
+        t3 = Task(2)
+
+        try:
+            Task(1, children=[t2, t3])
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
+
     def test_parents(self):
         t1 = Task(id=1, name='1')
         t2 = Task(id=2, name='2')
@@ -95,15 +104,14 @@ class TestTask(TestCase):
         t1.children.append(t2)
         t2.children.append(t3)
 
-        self.assertEqual(2, len(t3.parents))
-        self.assertEqual(2, t3.parents[0].id)
-        self.assertEqual(1, t3.parents[1].id)
+        self.assertEqual(2, len(t3.all_parents))
+        self.assertEqual(2, t3.all_parents[0].id)
+        self.assertEqual(1, t3.all_parents[1].id)
 
     def test_parents_add_remove(self):
         t1 = Task(id=1, name='1')
         t2 = Task(id=2, name='2')
         t1.children.append(t2)
-
 
     def test_children(self):
         t1 = Task(id=1, name='1')
@@ -184,10 +192,11 @@ class TestTask(TestCase):
         self.assertEqual(3, t1.all_children(3).id)
 
     def test_predecessors(self):
-        t1 = Task(id=1, name='1')
-        t2 = Task(id=2, name='2')
-        t3 = Task(id=3, name='3')
-        t4 = Task(id=4, name='4')
+        with WBS() as wbs:
+            t1 = wbs // Task(id=1, name='1')
+            t2 = wbs // Task(id=2, name='2')
+            t3 = wbs // Task(id=3, name='3')
+            t4 = wbs // Task(id=4, name='4')
         t1.children.append(t2)
         t1.children.append(t3)
         t1.children.append(t4)
@@ -203,8 +212,9 @@ class TestTask(TestCase):
         self.assertTrue(t4 not in t2.successors)
 
     def test_predecessors_set(self):
-        t1 = Task(id=1, name='1')
-        t2 = Task(id=2, name='2')
+        with WBS() as wbs:
+            t1 = wbs // Task(id=1, name='1')
+            t2 = wbs // Task(id=2, name='2')
 
         t2.predecessors = [t1]
 

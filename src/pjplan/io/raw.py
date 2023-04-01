@@ -1,8 +1,7 @@
 from datetime import datetime
-from typing import List, Union, Iterable
+from typing import List, Iterable
 
 from pjplan import Task, WBS
-from pjplan.wbs import TaskList
 
 
 class TaskRaw:
@@ -59,7 +58,8 @@ def tasks_to_raws(tasks: Iterable) -> List[TaskRaw]:
             '_Task__parent',
             '_Task__children',
             '_Task__predecessors',
-            '_Task__successors'
+            '_Task__successors',
+            '_Task__wbs'
         }
         for k in t.__dict__.keys():
             if k not in keys_to_gnore and k not in raw.__dict__:
@@ -69,8 +69,10 @@ def tasks_to_raws(tasks: Iterable) -> List[TaskRaw]:
 
     return raws
 
+def __add_task_to_wbs(task: Task, wbs: WBS):
+    wbs.app
 
-def raws_to_tasks(raws: List[TaskRaw]) -> List[Task]:
+def raws_to_wbs(raws: List[TaskRaw]) -> WBS:
     tasks_by_id = {}
     for raw in raws:
         t = Task(
@@ -81,9 +83,7 @@ def raws_to_tasks(raws: List[TaskRaw]) -> List[Task]:
             end=raw.end,
             estimate=raw.estimate,
             spent=raw.spent,
-            milestone=raw.milestone,
-            children=[],
-            predecessors=[]
+            milestone=raw.milestone
         )
 
         for k in raw.__dict__.keys():
@@ -106,9 +106,16 @@ def raws_to_tasks(raws: List[TaskRaw]) -> List[Task]:
         else:
             roots.append(task)
 
+    wbs = WBS()
+    for r in roots:
+        wbs.append(r)
+
+    for raw in raws:
+        task = wbs(raw.id)
+
         for predecessor_id in raw.predecessor_ids:
-            predecessor_task = tasks_by_id.get(predecessor_id)
+            predecessor_task = wbs(predecessor_id)
             if predecessor_task is not None:
                 task.predecessors.append(predecessor_task)
 
-    return roots
+    return wbs

@@ -1,15 +1,54 @@
 import re
+import sys
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional, Union, Iterable, Callable
 
+_ROOT_ID = sys.maxsize
 
-def _to_list(val: Union['Task', List['Task']]) -> List['Task']:
-    if type(val) is Task:
+
+def _to_list(val: Union['Task', Iterable['Task']]) -> List['Task']:
+    if val is None:
+        return []
+    elif type(val) is Task:
         return [val]
     elif type(val) is list or type(val) is tuple or type(val) is set:
-        return val
+        return [t for t in val]
+    elif isinstance(val, ImmutableTaskList):
+        return [t for t in val]
     else:
         raise RuntimeError("Unsupported type", type(val))
+
+
+def _find_root(task: 'Task'):
+    if task.parent is not None:
+        return _find_root(task.parent)
+    return task
+
+
+def _collect_subtree(task: 'Task') -> List['Task']:
+    res = [task]
+    for ch in task.children:
+        res += _collect_subtree(ch)
+    return res
+
+
+def _has_id_intersection(parent: 'Task', children: List['Task']):
+    parent_root = _find_root(parent)
+    parent_tree = _collect_subtree(parent_root)
+    all_children_tasks = []
+    for ch in children:
+        all_children_tasks += _collect_subtree(ch)
+
+    parent_tree_object_ids = set([id(t) for t in parent_tree])
+    new_tasks = [t for t in all_children_tasks if id(t) not in parent_tree_object_ids]
+
+    if len(new_tasks) == 0:
+        return False
+
+    parent_tree_ids = set([t.id for t in parent_tree])
+    new_task_ids = set([t.id for t in new_tasks])
+    return len(parent_tree_ids.intersection(new_task_ids)) > 0
 
 
 class _Repr:
@@ -30,19 +69,34 @@ class _Repr:
 
     @staticmethod
     def __calc_max_title_len(task: 'Task', level, _current_max):
-        _current_max = max(_current_max, len('   ' * level) + len(task.name))
+        name_len = len(task.name) if task.name is not None else 0
+        _current_max = max(_current_max, len('   ' * level) + name_len)
         for ch in task.children:
             _current_max = _Repr.__calc_max_title_len(ch, level + 1, _current_max)
         return _current_max
 
     @staticmethod
+    def __get_linked_task_id(task: 'Task', linked_task: 'Task'):
+        if linked_task is None or linked_task.id == _ROOT_ID:
+            return ''
+        external = linked_task.wbs != task.wbs
+        return f"{linked_task.id}{'(external)' if external else ''}"
+
+    @staticmethod
+    def __get_linked_tasks_id(task: 'Task', linked_tasks: Iterable['Task']):
+        res = []
+        for t in linked_tasks:
+            res.append(_Repr.__get_linked_task_id(task, t))
+        return ','.join(res)
+
+    @staticmethod
     def __get_field_value(t: 'Task', field: str) -> str:
         if field == 'predecessors':
-            return '[' + ','.join([str(p.id) for p in t.predecessors]) + ']'
+            return '[' + _Repr.__get_linked_tasks_id(t, t.predecessors) + ']'
         if field == 'successors':
-            return '[' + ','.join([str(p.id) for p in t.successors]) + ']'
+            return '[' + _Repr.__get_linked_tasks_id(t, t.successors) + ']'
         if field == 'parent':
-            return str(t.parent.id) if t.parent else ''
+            return _Repr.__get_linked_task_id(t, t.parent)
 
         if field not in t.__dict__:
             field = field.lower()
@@ -76,7 +130,7 @@ class _Repr:
         values = []
         for f in fields:
             if f == 'name':
-                values.append('   ' * level + task.name)
+                values.append('   ' * level + (task.name if task.name is not None else ''))
             else:
                 values.append(_Repr.__get_field_value(task, f))
 
@@ -221,7 +275,8 @@ class ImmutableTaskList:
         if key.startswith('__') > 0 or key.startswith('_'):
             super().__setattr__(key, value)
         else:
-            for t in self._list:
+            tasks = [t for t in self._list]
+            for t in tasks:
                 t.__setattr__(key, value)
 
     def __len__(self) -> int:
@@ -237,8 +292,7 @@ class ImmutableTaskList:
         :param other: other task list
         :return:
         """
-        vals = [v for v in other if v not in self._list]
-        return self._list.__add__(vals)
+        return self._list.__add__(other)
 
     def __lshift__(self, other: Union['Task', List['Task']]):
         for t in self:
@@ -275,45 +329,59 @@ class ImmutableTaskList:
         return print(_Repr.repr(self, fields, children, theme))
 
 
-class TaskList(ImmutableTaskList):
+class TaskList(ImmutableTaskList, ABC):
     """Mutable task list implementation"""
 
     def __init__(self, _list: List['Task']):
         super().__init__(_list)
 
-    def append(self, task: 'Task') -> bool:
+    @abstractmethod
+    def remove(self, task: 'Task'):
+        pass
+
+    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'ImmutableTaskList':
         """
-        Append task to the end of list if task not already in list
-        :param task: task
-        :return: True, if task added to list. False, if task already exists in list
+        Remove all tasks matched to key from list
+        :param key: see __call__ for details
+        :param kwargs: see __call__ for details
+        :return: deleted tasks
         """
-        if task not in self._list:
-            self._list.append(task)
-            return True
-        return False
+        tasks_to_delete = self(key, **kwargs)
+        if not tasks_to_delete:
+            return ImmutableTaskList([])
+
+        for t in tasks_to_delete:
+            self.remove(t)
+
+        return tasks_to_delete
+
+
+class ChildrenList(TaskList):
+
+    def __init__(self, parent: 'Task', _list, _setter):
+        super().__init__(_list)
+        self.__parent = parent
+        self.__setter = _setter
+
+    def append(self, task: 'Task'):
+        task.parent = self.__parent
 
     def remove(self, task: 'Task') -> bool:
-        """
-        Remove task from list
-        :param task: task
-        :return: True, if task removed. False, if task does not exists in list
-        """
-        if task in self._list:
-            self._list.remove(task)
-            return True
-        return False
+        if task not in self._list:
+            return False
+        self.__parent.children = [t for t in self._list if t != task]
+        return True
 
-    def insert(self, index: int, task: 'Task') -> bool:
+    def insert(self, index: int, task: 'Task'):
         """
         Insert task before index
         :param index: index
         :param task: task
         :return: True, if task added to list. False, if task already exists in list
         """
-        if task not in self._list:
-            self._list.insert(index, task)
-            return True
-        return False
+        task.parent = self.__parent
+        if len(self) > 0:
+            self.move(task, before=self[index])
 
     def move(self, task: 'Task', before: Optional['Task'] = None, after: Optional['Task'] = None) -> None:
         """
@@ -340,44 +408,7 @@ class TaskList(ImmutableTaskList):
         else:
             raise RuntimeError("'Before' or 'After' must be not None")
 
-    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'ImmutableTaskList':
-        """
-        Remove all tasks matched to key from list
-        :param key: see __call__ for details
-        :param kwargs: see __call__ for details
-        :return: deleted tasks
-        """
-        tasks_to_delete = self(key, **kwargs)
-        if not tasks_to_delete:
-            return ImmutableTaskList([])
-
-        for t in tasks_to_delete:
-            t.parent = None
-            t.predecessors = []
-            t.successors = []
-
-        return tasks_to_delete
-
-
-class ChildrenList(TaskList):
-
-    def __init__(self, parent: 'Task', _list, _setter):
-        super().__init__(_list)
-        self.__parent = parent
-        self.__setter = _setter
-
-    def append(self, task: 'Task'):
-        task.parent = self.__parent
-
-    def remove(self, task: 'Task') -> bool:
-        if task not in self._list:
-            return False
-        task.parent = None
-        return True
-
-    def insert(self, index: int, task: 'Task'):
-        super().insert(index, task)
-        task.parent = self.__parent
+        self.__setter(self._list)
 
     def sort(self, key: Union[str, List[str]], reverse=False) -> None:
         """
@@ -420,6 +451,7 @@ class ChildrenList(TaskList):
 
 
 class PredecessorsList(TaskList):
+
     def __init__(self, parent: 'Task', _list):
         super().__init__(_list)
         self.__parent = parent
@@ -438,6 +470,7 @@ class PredecessorsList(TaskList):
 
 
 class SuccessorsList(TaskList):
+
     def __init__(self, parent: 'Task', _list):
         super().__init__(_list)
         self.__parent = parent
@@ -490,8 +523,6 @@ class Task:
         :param milestone: is task milestone or not
         :param estimate: task estimation in hours
         :param spent: task completed work in hours
-        :param parent: parent task
-        :param children: children tasks
         :param predecessors: predecessor tasks
         :param successors: successor tasks
         :param kwargs: additional task attributes
@@ -505,44 +536,84 @@ class Task:
         self.estimate = estimate
         self.spent = spent
 
+        self.__wbs: Optional['WBS'] = None
+
         self.__parent = None
-        self.parent = parent
-
         self.__children = []
-        self.children = children
-
         self.__predecessors = []
-        self.predecessors = predecessors
-
         self.__successors = []
-        self.successors = successors
+
+        if parent is not None:
+            self.parent = parent
+        if children is not None:
+            self.children = children
+        if successors:
+            self.successors = successors
+        if predecessors:
+            self.predecessors = predecessors
 
         for k, v in kwargs.items():
             self.__setattr__(k, v)
 
+    def _attach(self, wbs: 'WBS'):
+        if wbs is None:
+            return
+        self.__wbs = wbs
+        for ch in self.children:
+            ch._attach(wbs)
+
     @property
-    def parent(self) -> 'Task':
+    def parent(self) -> Optional['Task']:
         """Parent task"""
+        if self.__parent is None or self.__parent.id == _ROOT_ID:
+            return None
         return self.__parent
 
+    @property
+    def wbs(self):
+        return self.__wbs
+
+    # noinspection PyProtectedMember
     @parent.setter
-    def parent(self, value):
-        if self.__parent and self in self.__parent.__children:
+    def parent(self, parent: 'Task'):
+
+        if self.__wbs is None:
+            # Check parent changed
+            if parent is not None and (self.parent is None or id(self.parent) != id(parent)):
+                # Check no ID duplicates
+                if _has_id_intersection(parent, [self]):
+                    raise RuntimeError("Task subtree ids intersects with parent tree ids")
+        else:
+            if parent is not None and parent.__wbs != self.__wbs:
+                raise RuntimeError("Parent must be from same WBS")
+
+        if self.__parent is not None and self in self.__parent.__children:
             self.__parent.__children.remove(self)
 
-        self.__parent = value
+        if parent is None:
+            if self.__wbs is not None:
+                self.__wbs._root().children.append(self)
+            else:
+                self.__parent = None
+                self.predecessors = []
+                self.successors = []
+                for ch in self.__children:
+                    ch.parent = None
 
-        if value and self not in value.__children:
-            value.__children.append(self)
+        else:
+            self.__parent = parent
+            self._attach(parent.__wbs)
+            if parent and self not in parent.__children:
+                parent.__children.append(self)
 
     @property
-    def parents(self) -> ImmutableTaskList:
+    def all_parents(self) -> ImmutableTaskList:
         """List of all parent tasks in hierarchy"""
         return ImmutableTaskList(self.__get_all_parents())
 
     def __get_all_parents(self) -> List['Task']:
         def get_parent(t):
-            if t is not None:
+            if t is not None and t.id != _ROOT_ID:
                 yield t
                 yield from get_parent(t.parent)
 
@@ -557,18 +628,32 @@ class Task:
         return ChildrenList(self, self.__children, self.__set_children)
 
     @children.setter
-    def children(self, value: List['Task']):
-        if not value:
-            value = []
+    def children(self, value: Iterable['Task']):
+        value = _to_list(value)
+
+        if self.__wbs is None:
+            # If self.__wbs is None, all children wbs must be None
+            if len([v for v in value if v.__wbs is not None]) > 0:
+                raise RuntimeError('Children tasks must be from same WBS as parent task')
+
+            # Check no ids intersection
+            if _has_id_intersection(self, value):
+                raise RuntimeError("Task tree ids intersects with children ids")
+
+        else:
+            # Is self.__wbs is not None, children wbs must be none or equals to self.__wbs
+            if len([v for v in value if v.__wbs is not None and v.__wbs != self.__wbs]) > 0:
+                raise RuntimeError('Children tasks must be from same WBS as parent task')
+
+            if _has_id_intersection(self, value):
+                raise RuntimeError(f"Id intersection detected")
 
         for v in self.__children:
             v.__parent = None
 
         self.__children.clear()
 
-        new_children = [t for t in value]
-
-        for v in new_children:
+        for v in value:
             v.parent = self
 
     @property
@@ -591,11 +676,16 @@ class Task:
 
     @predecessors.setter
     def predecessors(self, value: List['Task']):
-        if not value:
-            value = []
+        value = _to_list(value)
+
+        parents = self.all_parents
+        for v in value:
+            if v in parents:
+                raise RuntimeError("Can't set parent as predecessor")
 
         for v in self.__predecessors:
-            v.__successors.remove(self)
+            if self in v.__successors:
+                v.__successors.remove(self)
 
         self.__predecessors = [v for v in value]
 
@@ -623,11 +713,16 @@ class Task:
 
     @successors.setter
     def successors(self, value: List['Task']):
-        if not value:
-            value = []
+        value = _to_list(value)
+
+        parents = self.all_parents
+        for v in value:
+            if v in parents:
+                raise RuntimeError("Can't set parent as successor")
 
         for v in self.__successors:
-            v.__predecessors.remove(self)
+            if self in v.__predecessors:
+                v.__predecessors.remove(self)
 
         self.__successors = [v for v in value]
 
@@ -658,7 +753,7 @@ class Task:
         """Creates copy of this task"""
         cloned = Task(id=self.id, name=self.name)
 
-        keys_to_gnore = {'_Task__parent', '_Task__children', '_Task__predecessors', '_Task__successors'}
+        keys_to_gnore = {'_Task__parent', '_Task__children', '_Task__predecessors', '_Task__successors', '_Task__wbs'}
 
         for k in self.__dict__.keys():
             if k not in keys_to_gnore:
@@ -684,8 +779,8 @@ class Task:
         self.successors += _to_list(other)
         return other
 
-    def __eq__(self, other):
-        return isinstance(other, self.__class__) and self.id == other.id
+    # def __eq__(self, other):
+    #     return isinstance(other, self.__class__) and self.id == other.id
 
     def __str__(self):
         return str(self.__to_dict())
@@ -716,25 +811,24 @@ class Task:
 
 
 class WBS:
-    """Work Burndown Structure, Project"""
+    """Work Burn-down Structure"""
 
-    def __init__(self, name=None, tasks: List[Task] = None, **kwargs):
+    # noinspection PyProtectedMember
+    def __init__(self, tasks: List[Task] = None, **kwargs):
         """
         Constructor
         :param name: name of project
         :param tasks: list of tasks
         :param kwargs: any additional WBS arguments
         """
-        self.__root = Task(0, name, children=tasks, **kwargs)
+        self.__root = Task(_ROOT_ID, **kwargs)
+        self.__root._attach(self)
 
-    @property
-    def name(self):
-        """Name of WBS"""
-        return self.__root.name
+        if tasks:
+            self.__root.children = [v.clone() for v in tasks]
 
-    @name.setter
-    def name(self, value):
-        self.__root.name = value
+    def _root(self):
+        return self.__root
 
     @property
     def roots(self):
@@ -826,9 +920,13 @@ class WBS:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def clone(self) -> 'WBS':
-        """Returns copy of this WBS."""
-        all_tasks = {task.id: task for task in self.__root.all_children + [self.__root]}
+    def __clone(self, roots: Iterable[Task]) -> 'WBS':
+        all_tasks_list = []
+        for r in roots:
+            all_tasks_list.append(r)
+            all_tasks_list += [t for t in r.all_children]
+
+        all_tasks = {task.id: task for task in all_tasks_list}
 
         cloned_tasks = {task.id: task.clone() for task in all_tasks.values()}
 
@@ -836,25 +934,41 @@ class WBS:
         # This predecessors/successors should not be copied.
         for t in all_tasks.values():
             for pr in t.predecessors:
-                cloned_tasks.setdefault(pr.id, pr)
+                if pr.wbs != self:
+                    cloned_tasks.setdefault(pr.id, pr)
             for sc in t.successors:
-                cloned_tasks.setdefault(sc.id, sc)
+                if sc.wbs != self:
+                    cloned_tasks.setdefault(sc.id, sc)
 
         for t in all_tasks.values():
             c = cloned_tasks[t.id]
-            c.parent = cloned_tasks[all_tasks[t.id].parent.id] if all_tasks[t.id].parent else None
+            c.parent = cloned_tasks.get(all_tasks[t.id].parent.id) if all_tasks[t.id].parent else None
             c.children = [cloned_tasks[ch.id] for ch in all_tasks[t.id].children]
-            c.predecessors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].predecessors]
-            c.successors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].successors]
+            c.predecessors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].predecessors if ch.id in cloned_tasks]
+            c.successors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].successors if ch.id in cloned_tasks]
 
-        cloned_project = WBS(self.__root.name)
-        cloned_project.__root = cloned_tasks[self.__root.id]
+        cloned_project = WBS()
+        cloned_project.roots = [cloned_tasks[r.id] for r in roots]
         keys_to_gnore = {'_WBS__roots', '_WBS__root'}
         for k in self.__dict__.keys():
             if k not in keys_to_gnore:
                 cloned_project.__setattr__(k, self.__getattribute__(k))
 
         return cloned_project
+
+    def clone(self) -> 'WBS':
+        """Returns copy of this WBS."""
+        return self.__clone(self.roots)
+
+    def subtree(self, roots: Union[Task, List[Task]]) -> 'WBS':
+        """
+        Returns new WBS, contains subtree of this WBS with all children
+        and successors/predecessors inside this subtree or outside WBS.
+
+        :param roots: root tasks for new WBS
+        :return: new WBS
+        """
+        return self.__clone(_to_list(roots))
 
     def __repr__(self):
         return _Repr.repr(self.roots)
