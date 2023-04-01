@@ -96,6 +96,17 @@ class TestWBS(TestCase):
         self.assertEqual(2, prj.roots[2].id)
         self.assertEqual(3, len(prj.roots))
 
+    def test_set_children_make_child_a_parent_of_its_parent(self):
+        with WBS() as wbs:
+            with wbs // Task(1) as t1:
+                t2 = t1 // Task(2)
+
+        try:
+            t2.children = [t1]
+            self.fail("RuntimeError expected. Can't make child a parent of its parent")
+        except RuntimeError:
+            pass
+
     def test_set_children_hidden_remove_1(self):
         prj = WBS()
         prj // Task(1)
@@ -137,6 +148,17 @@ class TestWBS(TestCase):
 
         self.assertEqual(2, len(wbs))
         self.assertEqual(2, wbs(2).id)
+
+    def test_set_parent_from_children(self):
+        with WBS() as wbs:
+            with wbs // Task(1) as t1:
+                t2 = t1 // Task(2)
+
+        try:
+            t1.parent = t2
+            self.fail("RuntimeError expected. Can't set child a parent of int parent")
+        except RuntimeError:
+            pass
 
     def test_set_parent_outside_wbs(self):
         wbs1 = WBS()

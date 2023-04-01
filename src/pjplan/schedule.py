@@ -28,6 +28,10 @@ class ResourceUsage:
             return resource_usage_dict
         return resource_usage_dict.setdefault(self.__get_key(date), 0)
 
+    def __repr__(self):
+        # TODO визуализоровать
+        return ""
+
 
 class IScheduler(ABC):
     """Планировщик проектов. Строит расписание проекта"""

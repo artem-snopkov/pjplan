@@ -5,16 +5,14 @@ from typing import List, Tuple
 
 
 class IWorkCalendar(ABC):
-    """
-    Рабочий календарь
-    """
+    """Work calendar interface"""
 
     @abstractmethod
     def get_available_hours(self, date: datetime) -> float:
         """
-        Возвращает количество рабочих часов в указанную дату
-        :param date: дата
-        :return: количество рабочих часов
+        Returns number of work hours for date
+        :param date: date
+        :return: number of work hours
         """
         pass
 
@@ -22,37 +20,45 @@ class IWorkCalendar(ABC):
 @dataclass
 class GenericCalendar(IWorkCalendar):
     """
-    Реализация IWorkCalendar, в которой календарь задается следующими параметрами:
-    1. working_days - список рабочих дней в неделе 0 - пнд, 1 - вт и т.д.
-    2. day_hours - количество рабочих часов в каждом рабочем дне
-    3. days_off - список дат недоступности
+    IWorkCalendar implementation with following arguments:
+    1. working_days - list of week working days 0 - monday, 1 - tuesday, etc.
+    2. day_hours - number of working hours in working day
+    3. dates_off - list of dates off
     """
     working_days: List[int] = None,
     day_hours: int = None
-    days_off: List[datetime] = None
+    dates_off: List[datetime] = None
 
     def get_available_hours(self, date: datetime) -> float:
         if date.weekday() not in self.working_days:
             return 0
 
-        if self.days_off and date not in self.days_off:
+        if self.dates_off and date not in self.dates_off:
             return 0
 
         return self.day_hours
 
+    def __repr__(self):
+        # TODO визуализировать в виде таблицы
+        return f"""
+        Working days: {self.working_days}
+        Day hours: {self.day_hours}
+        Dates off: {self.dates_off}
+        """
 
 class CapacityCalendar(IWorkCalendar):
     """
-    Реализация IWorkCalendar, в которой календарь задается следующими параметрами:
-    1. capacities - список пар (дата, количество рабочих часов)
-    2. working_days - список рабочих дней в неделе 0 - пнд, 1 - вт и т.д.
+    IWorkCalendar implementation with following parameters:
+    1. capacities - list of pairs (date, number of working hours)
+    2. working_days - list of working week days 0 - monday, 1 - tuesday etc.
+    3. day_hours - number of working hours in working day
 
-    Определение доступного времени в определенную дату работает так:
-    1. Если дата есть в списке capacities, то возвращается соответствующее значение из capacities
-    2. Иначе проверяется, входит ли дата в working_days. Если входит, возвращается 8, иначе 0
+    get_available_hours uses following algorithm:
+    1. if date in capacities, return working hours from this capacity
+    2. Else check if date in working_days. If yes, returns day_hours. Else returns 0
     """
 
-    def __init__(self, capacities: List[Tuple[datetime, float]], working_days=None):
+    def __init__(self, capacities: List[Tuple[datetime, float]], working_days=None, day_hours=8):
         self.capacities = {self.__key(c[0]): c[1] for c in capacities}
         self.__calc_min_max_dates()
 
@@ -60,6 +66,7 @@ class CapacityCalendar(IWorkCalendar):
             working_days = [0, 1, 2, 3, 4]
 
         self.working_days = working_days
+        self.day_hours = day_hours
 
     @staticmethod
     def __key(d: datetime) -> str:
@@ -74,6 +81,12 @@ class CapacityCalendar(IWorkCalendar):
             self.min_date = min([datetime.strptime(c, '%Y-%m-%d') for c in self.capacities.keys()])
 
     def set_capacities(self, from_date: datetime, to_date: datetime, value: float):
+        """
+        Upsert capacities to calendar
+        :param from_date: from date
+        :param to_date: to date
+        :param value: day_hours
+        """
         d = from_date
         while d <= to_date:
             self.capacities[self.__key(d)] = value
@@ -91,6 +104,7 @@ class CapacityCalendar(IWorkCalendar):
         return capacity if capacity is not None else 0
 
     def __repr__(self) -> str:
+        # TODO визуализировать в виде таблицы
         return f'min={self.min_date}, max={self.max_date}'
 
 
@@ -98,3 +112,4 @@ DEFAULT_CALENDAR = GenericCalendar(
     working_days=[0, 1, 2, 3, 4],
     day_hours=8
 )
+"""Default calendar monday-friday with 8 hours per day"""

@@ -2,7 +2,7 @@ import re
 import sys
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional, Union, Iterable, Callable
+from typing import List, Optional, Union, Iterable, Callable, Any
 
 _ROOT_ID = sys.maxsize
 
@@ -14,7 +14,7 @@ def _to_list(val: Union['Task', Iterable['Task']]) -> List['Task']:
         return [val]
     elif type(val) is list or type(val) is tuple or type(val) is set:
         return [t for t in val]
-    elif isinstance(val, ImmutableTaskList):
+    elif isinstance(val, Iterable):
         return [t for t in val]
     else:
         raise RuntimeError("Unsupported type", type(val))
@@ -33,7 +33,7 @@ def _collect_subtree(task: 'Task') -> List['Task']:
     return res
 
 
-def _has_id_intersection(parent: 'Task', children: List['Task']):
+def _has_id_intersection(parent: 'Task', children: Iterable['Task']):
     parent_root = _find_root(parent)
     parent_tree = _collect_subtree(parent_root)
     all_children_tasks = []
@@ -49,6 +49,17 @@ def _has_id_intersection(parent: 'Task', children: List['Task']):
     parent_tree_ids = set([t.id for t in parent_tree])
     new_task_ids = set([t.id for t in new_tasks])
     return len(parent_tree_ids.intersection(new_task_ids)) > 0
+
+
+def _check_not_none(obj: Any, name: str):
+    if obj is None:
+        raise RuntimeError(f"{name} is None")
+
+
+def _check_no_nones_in_list(lst: List, name: str):
+    for v in lst:
+        if v is None:
+            raise RuntimeError(f"{name} contains None value")
 
 
 class _Repr:
@@ -126,7 +137,7 @@ class _Repr:
         return '\033[' + color + text + '\033[0m'
 
     @staticmethod
-    def __print_task_subtree(task: 'Task', fields: List[str], level, fmt, children, theme):
+    def __print_task_subtree(task: 'Task', fields: Iterable[str], level, fmt, children, theme):
         values = []
         for f in fields:
             if f == 'name':
@@ -148,7 +159,7 @@ class _Repr:
         return res
 
     @staticmethod
-    def repr(tasks: Iterable['Task'], fields: List[str] = None, children=True, theme: dict = None):
+    def repr(tasks: Iterable['Task'], fields: Iterable[str] = None, children=True, theme: dict = None):
         if fields is None:
             fields = ['id', 'name', 'resource', 'estimate', 'spent', 'start', 'end', 'predecessors']
 
@@ -193,6 +204,7 @@ class ImmutableTaskList:
         :return: index in list
         :raises RuntimeError if task does not exists in list
         """
+        _check_not_none(task, "Task")
         return self._list.index(task)
 
     @staticmethod
@@ -292,16 +304,16 @@ class ImmutableTaskList:
         :param other: other task list
         :return:
         """
-        return self._list.__add__(other)
+        return self._list.__add__(_to_list(other))
 
-    def __lshift__(self, other: Union['Task', List['Task']]):
+    def __lshift__(self, other: Union['Task', Iterable['Task']]):
         for t in self:
-            t.predecessors += _to_list(other)
+            t.predecessors += other
         return other
 
-    def __rshift__(self, other: Union['Task', List['Task']]):
+    def __rshift__(self, other: Union['Task', Iterable['Task']]):
         for t in self:
-            t.successors += _to_list(other)
+            t.successors += other
         return other
 
     def __getitem__(self, query):
@@ -313,7 +325,7 @@ class ImmutableTaskList:
     def __repr__(self) -> str:
         return _Repr.repr(self)
 
-    def print(self, fields: List[str] = None, children=True, theme: dict = None) -> None:
+    def print(self, fields: Iterable[str] = None, children=True, theme: dict = None) -> None:
         """
         Print task sheet
         :param fields: fields to print
@@ -364,9 +376,22 @@ class ChildrenList(TaskList):
         self.__setter = _setter
 
     def append(self, task: 'Task'):
+        """
+        Appends task to the end of children list. If task already exists in WBS, it will be moved to new parent
+        :param task: task
+        :return:
+        :raises RuntimeError: if WBS integrity lost (i.e. task with same ID already exists)
+        """
+        _check_not_none(task, 'Task')
         task.parent = self.__parent
 
     def remove(self, task: 'Task') -> bool:
+        """
+        Removes task from children list and from WBS
+        :param task: task to remove
+        :return: True, if task exists. Otherwise False
+        """
+        _check_not_none(task, 'Task')
         if task not in self._list:
             return False
         self.__parent.children = [t for t in self._list if t != task]
@@ -374,11 +399,12 @@ class ChildrenList(TaskList):
 
     def insert(self, index: int, task: 'Task'):
         """
-        Insert task before index
+        Insert task in children list before index. If task already exists in WBS it will be moved to new parent
         :param index: index
         :param task: task
-        :return: True, if task added to list. False, if task already exists in list
+        :raises RuntimeError: if WBS integrity lost (i.e. task with same ID already exists)
         """
+        _check_not_none(task, 'Task')
         task.parent = self.__parent
         if len(self) > 0:
             self.move(task, before=self[index])
@@ -389,7 +415,7 @@ class ChildrenList(TaskList):
         :param task: task to move
         :param before: task
         :param after: task
-        :raises RuntimeError if task/before/after does not exists in list
+        :raises RuntimeError: if task/before/after does not exists in list
         """
         if task not in self._list:
             raise RuntimeError("'Task' not found in list")
@@ -451,46 +477,66 @@ class ChildrenList(TaskList):
 
 
 class PredecessorsList(TaskList):
+    """List of predecessor tasks"""
 
     def __init__(self, parent: 'Task', _list):
         super().__init__(_list)
         self.__parent = parent
 
     def append(self, task: 'Task'):
+        """
+        Appends task to predecessors list
+        :param task: task to add
+        :raises RuntimeError: if WBS integrity lost (i.e. root is predecessor of child)
+        """
+        _check_not_none(task, 'Task')
         self.__parent.predecessors = [v for v in self.__parent.predecessors] + [task]
 
     def remove(self, task: 'Task') -> bool:
+        """
+        Removes task from predecessors
+        :param task: task to remove
+        :return: True, if task exists in predecessors.
+        """
+        _check_not_none(task, 'Task')
         if task not in self._list:
             return False
         self.__parent.predecessors = [v for v in self.__parent.predecessors if v != task]
         return True
 
-    def insert(self, index: int, task: 'Task'):
-        raise RuntimeError("Unsupported operation")
-
 
 class SuccessorsList(TaskList):
+    """List of successors tasks"""
 
     def __init__(self, parent: 'Task', _list):
         super().__init__(_list)
         self.__parent = parent
 
     def append(self, task: 'Task'):
+        """
+        Appends task to successors
+        :param task: task to add
+        :raises RuntimeError: if WBS integrity lost (i.e. root is successor of child)
+        """
+        _check_not_none(task, 'Task')
         self.__parent.successors = [v for v in self.__parent.successors] + [task]
 
     def remove(self, task: 'Task') -> bool:
+        """
+        Removes task from successors
+        :param task: task to remove
+        :return: True, if task exists in successors
+        """
+        _check_not_none(task, 'Task')
         if task not in self._list:
             return False
         self.__parent.successors = [v for v in self.__parent.successors if v != task]
         return True
 
-    def insert(self, index: int, task: 'Task'):
-        raise RuntimeError("Unsupported operation")
-
 
 class Task:
     """
-    Task is a base Work Burndown Structure (WBS) element. A node in tasks graph.
+    Task is a base Work Burn-down Structure (WBS) element. A node in tasks graph.
     Tasks are connected in several ways:
     1. parent
     2. children
@@ -571,11 +617,16 @@ class Task:
 
     @property
     def wbs(self):
+        """WBS that task attached to or None, if task detached"""
         return self.__wbs
 
     # noinspection PyProtectedMember
     @parent.setter
-    def parent(self, parent: 'Task'):
+    def parent(self, parent: Optional['Task']):
+        """
+        Setter for parent task
+        :param parent: new parent
+        """
 
         if self.__wbs is None:
             # Check parent changed
@@ -586,6 +637,11 @@ class Task:
         else:
             if parent is not None and parent.__wbs != self.__wbs:
                 raise RuntimeError("Parent must be from same WBS")
+
+        if parent is not None:
+            if parent in self.all_children:
+                raise RuntimeError(f"Task {parent.id} is a child of task {self.id}. Can't make child "
+                                   f"a parent of its parent")
 
         if self.__parent is not None and self in self.__parent.__children:
             self.__parent.__children.remove(self)
@@ -628,8 +684,10 @@ class Task:
         return ChildrenList(self, self.__children, self.__set_children)
 
     @children.setter
-    def children(self, value: Iterable['Task']):
+    def children(self, value: Union['Task', Iterable['Task']]):
+        """Setter for children tasks"""
         value = _to_list(value)
+        _check_no_nones_in_list(value, 'children')
 
         if self.__wbs is None:
             # If self.__wbs is None, all children wbs must be None
@@ -647,6 +705,10 @@ class Task:
 
             if _has_id_intersection(self, value):
                 raise RuntimeError(f"Id intersection detected")
+
+        for ch in value:
+            if self in ch.all_children:
+                raise RuntimeError(f"Task {self.id} is a child of {ch.id}. Can't make child a parent of its parent")
 
         for v in self.__children:
             v.__parent = None
@@ -675,13 +737,22 @@ class Task:
         return PredecessorsList(self, self.__predecessors)
 
     @predecessors.setter
-    def predecessors(self, value: List['Task']):
+    def predecessors(self, value: Union['Task', Iterable['Task']]):
+        """
+        Setter for predecessor tasks
+        :param value: new predecessors
+        """
         value = _to_list(value)
+        _check_no_nones_in_list(value, 'predecessors')
 
         parents = self.all_parents
         for v in value:
             if v in parents:
                 raise RuntimeError("Can't set parent as predecessor")
+
+        for v in value:
+            if self in v.all_predecessors:
+                raise RuntimeError(f"{self.id} exists in {v.id} predecessors. Cyclic dependency")
 
         for v in self.__predecessors:
             if self in v.__successors:
@@ -712,13 +783,22 @@ class Task:
         return SuccessorsList(self, self.__successors)
 
     @successors.setter
-    def successors(self, value: List['Task']):
+    def successors(self, value: Union['Task', Iterable['Task']]):
+        """
+        Setter for direct successors
+        :param value: new direct successors
+        """
         value = _to_list(value)
+        _check_no_nones_in_list(value, 'successors')
 
         parents = self.all_parents
         for v in value:
             if v in parents:
                 raise RuntimeError("Can't set parent as successor")
+
+        for v in value:
+            if self in v.all_successors:
+                raise RuntimeError(f"{self.id} exists in {v.id} successors. Cyclic dependency")
 
         for v in self.__successors:
             if self in v.__predecessors:
@@ -750,7 +830,7 @@ class Task:
         return d
 
     def clone(self, **kwargs) -> 'Task':
-        """Creates copy of this task"""
+        """Creates copy of this task without parent/children/successors/predecessors"""
         cloned = Task(id=self.id, name=self.name)
 
         keys_to_gnore = {'_Task__parent', '_Task__children', '_Task__predecessors', '_Task__successors', '_Task__wbs'}
@@ -764,23 +844,20 @@ class Task:
 
         return cloned
 
-    def __floordiv__(self, other: Union['Task', List['Task']]):
+    def __floordiv__(self, other: Union['Task', Iterable['Task']]):
         """Synonym for children.append(other) and childred += other"""
-        self.children += _to_list(other)
+        self.children += other
         return other
 
-    def __lshift__(self, other: Union['Task', List['Task']]):
+    def __lshift__(self, other: Union['Task', Iterable['Task']]):
         """Synonym for predecessors.append(other) and predecessors += other"""
-        self.predecessors += _to_list(other)
+        self.predecessors += other
         return other
 
-    def __rshift__(self, other: Union['Task', List['Task']]):
+    def __rshift__(self, other: Union['Task', Iterable['Task']]):
         """Synonym for successors.append(other) или successors += other"""
-        self.successors += _to_list(other)
+        self.successors += other
         return other
-
-    # def __eq__(self, other):
-    #     return isinstance(other, self.__class__) and self.id == other.id
 
     def __str__(self):
         return str(self.__to_dict())
@@ -794,7 +871,7 @@ class Task:
     def __repr__(self):
         return _Repr.repr([self])
 
-    def print(self, fields: List[str] = None, children=True, theme=None):
+    def print(self, fields: Iterable[str] = None, children=True, theme=None):
         """
         Print task
         :param fields: fields to print
@@ -814,11 +891,10 @@ class WBS:
     """Work Burn-down Structure"""
 
     # noinspection PyProtectedMember
-    def __init__(self, tasks: List[Task] = None, **kwargs):
+    def __init__(self, tasks: Iterable[Task] = None, **kwargs):
         """
         Constructor
-        :param name: name of project
-        :param tasks: list of tasks
+        :param tasks: list of tasks. New WBS will contain clones of this tasks
         :param kwargs: any additional WBS arguments
         """
         self.__root = Task(_ROOT_ID, **kwargs)
@@ -855,9 +931,12 @@ class WBS:
             return max(ends)
         return None
 
-    def append(self, task: Task) -> bool:
+    def append(self, task: Task):
         """Append task to root of WBS"""
-        return self.__root.children.append(task)
+        self.__root.children.append(task)
+
+    def insert(self, index: int, task: Task) -> bool:
+        return self.__root.children.insert(index, task);
 
     def __remove(self, task_to_remove: Task, current: Task):
         if task_to_remove is None:
@@ -911,7 +990,7 @@ class WBS:
     def __call__(self, key=None, **kwargs):
         return self.__root.all_children(key, **kwargs)
 
-    def __floordiv__(self, other: Union['Task', List['Task']]):
+    def __floordiv__(self, other: Union['Task', Iterable['Task']]):
         return self.__root // other
 
     def __enter__(self):
@@ -960,7 +1039,7 @@ class WBS:
         """Returns copy of this WBS."""
         return self.__clone(self.roots)
 
-    def subtree(self, roots: Union[Task, List[Task]]) -> 'WBS':
+    def subtree(self, roots: Union[Task, Iterable[Task]]) -> 'WBS':
         """
         Returns new WBS, contains subtree of this WBS with all children
         and successors/predecessors inside this subtree or outside WBS.
@@ -973,7 +1052,7 @@ class WBS:
     def __repr__(self):
         return _Repr.repr(self.roots)
 
-    def print(self, fields: List[str] = None, children=True, theme=None):
+    def print(self, fields: Iterable[str] = None, children=True, theme=None):
         """
         Print task sheet
         :param fields: fields to print

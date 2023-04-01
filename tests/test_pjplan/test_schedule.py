@@ -73,15 +73,3 @@ class TestDefaultScheduler(TestCase):
 
         self.assertEqual(datetime(2025, 1, 1), s(2).start)
         self.assertEqual(datetime(2025, 1, 2), s(1).start)
-
-    def test_loops(self):
-        p = WBS()
-        t1 = p // Task(1, '1')
-        t2 = p // Task(2, '2')
-        t3 = p // Task(3, '3')
-
-        t1.successors.append(t2)
-        t2.successors.append(t3)
-        t3.successors.append(t1)
-
-        self.assertRaises(RuntimeError, lambda: pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p))

@@ -224,6 +224,26 @@ class TestTask(TestCase):
 
         self.assertEqual(0, len(t1.successors))
 
+    def test_predecessors_cyclic(self):
+        t1 = Task(1)
+        t2 = Task(2, predecessors=[t1])
+
+        try:
+            t1.predecessors = t2
+            self.fail("FuntimeError expected")
+        except RuntimeError:
+            pass
+
+    def test_successors_cyclic(self):
+        t1 = Task(1)
+        t2 = Task(2, successors=[t1])
+
+        try:
+            t1.successors = [t2]
+            self.fail("FuntimeError expected")
+        except RuntimeError:
+            pass
+
     def test_all_predecessors(self):
         t1 = Task(id=1, name='1')
         t2 = Task(id=2, name='2')
