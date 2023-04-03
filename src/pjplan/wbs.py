@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional, Union, Iterable, Callable, Any
 
+from pjplan.utils import GREEN, GREY, RED, PINK, YELLOW, TEAL, BLUE, colored
+
 _ROOT_ID = sys.maxsize
 
 
@@ -65,17 +67,9 @@ def _check_no_nones_in_list(lst: List, name: str):
 class _Repr:
     """Utility class for print task sheets"""
 
-    __red = '91m'
-    __green = '92m'
-    __yellow = '93m'
-    __blue = '94m'
-    __pink = '95m'
-    __teal = '96m'
-    __grey = '97m'
-
     __DEFAULT_THEME = {
-        'header_color': __green,
-        'level_colors': [__blue, __teal, __yellow, __pink, __red, __grey]
+        'header_color': GREEN,
+        'level_colors': [BLUE, TEAL, YELLOW, PINK, RED, GREY]
     }
 
     @staticmethod
@@ -133,10 +127,6 @@ class _Repr:
         return max_len
 
     @staticmethod
-    def __colored(text, color):
-        return '\033[' + color + text + '\033[0m'
-
-    @staticmethod
     def __print_task_subtree(task: 'Task', fields: Iterable[str], level, fmt, children, theme):
         values = []
         for f in fields:
@@ -151,7 +141,7 @@ class _Repr:
             colors = theme['level_colors']
             color = colors[level] if level < len(colors) else _Repr.__grey
 
-        res = _Repr.__colored(fmt.format(*values), color) + '\n'
+        res = colored(fmt.format(*values), color) + '\n'
         if children:
             for ch in task.children:
                 res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children, theme)
@@ -183,7 +173,7 @@ class _Repr:
 
         color = theme['header_color'] if 'header_color' in theme else _Repr.__grey
 
-        res = _Repr.__colored(fmt.format(*title), color) + '\n'
+        res = colored(fmt.format(*title), color) + '\n'
 
         for _task in tasks:
             res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children, theme)
@@ -191,7 +181,7 @@ class _Repr:
         return res
 
 
-class ImmutableTaskList:
+class _ImmutableTaskList:
     """Immutable task list implementation"""
 
     def __init__(self, _list: List['Task']):
@@ -217,7 +207,7 @@ class ImmutableTaskList:
             self,
             key: Union[int, Callable[['Task'], bool]] = None,
             **kwargs
-    ) -> Union[Optional['Task'], 'ImmutableTaskList']:
+    ) -> Union[Optional['Task'], '_ImmutableTaskList']:
         """
         Search tasks in list
         :param key: task id or Callable[[Task], bool] that implements filter
@@ -228,11 +218,11 @@ class ImmutableTaskList:
             if type(key) is int:
                 return next((t for t in self if t.id == key), None)
             if callable(key):
-                return ImmutableTaskList([t for t in self if key(t)])
+                return _ImmutableTaskList([t for t in self if key(t)])
             raise RuntimeError(f"Unsupported key type: {type(key)}")
 
         if kwargs is None:
-            return ImmutableTaskList([t for t in self._list])
+            return _ImmutableTaskList([t for t in self._list])
 
         def search(t, **kw):
             for k, v in kw.items():
@@ -272,7 +262,7 @@ class ImmutableTaskList:
                     return False
             return True
 
-        return ImmutableTaskList([t for t in self if search(t, **kwargs)])
+        return _ImmutableTaskList([t for t in self if search(t, **kwargs)])
 
     def __iter__(self):
         return iter(self._list)
@@ -341,7 +331,7 @@ class ImmutableTaskList:
         return print(_Repr.repr(self, fields, children, theme))
 
 
-class TaskList(ImmutableTaskList, ABC):
+class _TaskList(_ImmutableTaskList, ABC):
     """Mutable task list implementation"""
 
     def __init__(self, _list: List['Task']):
@@ -351,7 +341,7 @@ class TaskList(ImmutableTaskList, ABC):
     def remove(self, task: 'Task'):
         pass
 
-    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> 'ImmutableTaskList':
+    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs) -> '_ImmutableTaskList':
         """
         Remove all tasks matched to key from list
         :param key: see __call__ for details
@@ -360,7 +350,7 @@ class TaskList(ImmutableTaskList, ABC):
         """
         tasks_to_delete = self(key, **kwargs)
         if not tasks_to_delete:
-            return ImmutableTaskList([])
+            return _ImmutableTaskList([])
 
         for t in tasks_to_delete:
             self.remove(t)
@@ -368,7 +358,7 @@ class TaskList(ImmutableTaskList, ABC):
         return tasks_to_delete
 
 
-class ChildrenList(TaskList):
+class _ChildrenList(_TaskList):
 
     def __init__(self, parent: 'Task', _list, _setter):
         super().__init__(_list)
@@ -476,7 +466,7 @@ class ChildrenList(TaskList):
         self.__setter(self._list)
 
 
-class PredecessorsList(TaskList):
+class _PredecessorsList(_TaskList):
     """List of predecessor tasks"""
 
     def __init__(self, parent: 'Task', _list):
@@ -505,7 +495,7 @@ class PredecessorsList(TaskList):
         return True
 
 
-class SuccessorsList(TaskList):
+class _SuccessorsList(_TaskList):
     """List of successors tasks"""
 
     def __init__(self, parent: 'Task', _list):
@@ -651,10 +641,6 @@ class Task:
                 self.__wbs._root().children.append(self)
             else:
                 self.__parent = None
-                self.predecessors = []
-                self.successors = []
-                for ch in self.__children:
-                    ch.parent = None
 
         else:
             self.__parent = parent
@@ -663,9 +649,9 @@ class Task:
                 parent.__children.append(self)
 
     @property
-    def all_parents(self) -> ImmutableTaskList:
+    def all_parents(self) -> _ImmutableTaskList:
         """List of all parent tasks in hierarchy"""
-        return ImmutableTaskList(self.__get_all_parents())
+        return _ImmutableTaskList(self.__get_all_parents())
 
     def __get_all_parents(self) -> List['Task']:
         def get_parent(t):
@@ -679,9 +665,9 @@ class Task:
         self.__children = lst
 
     @property
-    def children(self) -> ChildrenList:
+    def children(self) -> _ChildrenList:
         """List of direct children tasks"""
-        return ChildrenList(self, self.__children, self.__set_children)
+        return _ChildrenList(self, self.__children, self.__set_children)
 
     @children.setter
     def children(self, value: Union['Task', Iterable['Task']]):
@@ -719,9 +705,9 @@ class Task:
             v.parent = self
 
     @property
-    def all_children(self) -> ImmutableTaskList:
+    def all_children(self) -> _ImmutableTaskList:
         """List of all children tasks: direct children, children of direct children etc."""
-        return ImmutableTaskList(self.__get_all_children())
+        return _ImmutableTaskList(self.__get_all_children())
 
     def __get_all_children(self):
         def get_children(t):
@@ -732,9 +718,9 @@ class Task:
         return [t for t in get_children(self)]
 
     @property
-    def predecessors(self) -> PredecessorsList:
+    def predecessors(self) -> _PredecessorsList:
         """List of direct predecessors"""
-        return PredecessorsList(self, self.__predecessors)
+        return _PredecessorsList(self, self.__predecessors)
 
     @predecessors.setter
     def predecessors(self, value: Union['Task', Iterable['Task']]):
@@ -765,9 +751,9 @@ class Task:
                 v.__successors.append(self)
 
     @property
-    def all_predecessors(self) -> ImmutableTaskList:
+    def all_predecessors(self) -> _ImmutableTaskList:
         """List of all predecessors: direct predecessors, predecessors of direct predecessors etc."""
-        return ImmutableTaskList(self.__get_all_predecessors())
+        return _ImmutableTaskList(self.__get_all_predecessors())
 
     def __get_all_predecessors(self):
         def get_predecessor(t):
@@ -778,9 +764,9 @@ class Task:
         return [t for t in get_predecessor(self)]
 
     @property
-    def successors(self) -> SuccessorsList:
+    def successors(self) -> _SuccessorsList:
         """List of direct successors"""
-        return SuccessorsList(self, self.__successors)
+        return _SuccessorsList(self, self.__successors)
 
     @successors.setter
     def successors(self, value: Union['Task', Iterable['Task']]):
@@ -811,9 +797,9 @@ class Task:
                 v.__predecessors.append(self)
 
     @property
-    def all_successors(self) -> ImmutableTaskList:
+    def all_successors(self) -> _ImmutableTaskList:
         """List of all successors: direct successors, successors of direct successors, etc."""
-        return ImmutableTaskList(self.__get_all_successors())
+        return _ImmutableTaskList(self.__get_all_successors())
 
     def __get_all_successors(self):
         def get_successor(t):
@@ -827,6 +813,13 @@ class Task:
         d = {}
         for k in self.__dict__.keys():
             d[k] = self.__getattribute__(k)
+        return d
+
+    def to_dict(self):
+        d = {}
+        for k in self.__dict__.keys():
+            if not k.startswith('_'):
+                d[k] = self.__getattribute__(k)
         return d
 
     def clone(self, **kwargs) -> 'Task':
@@ -971,7 +964,7 @@ class WBS:
         tasks_to_delete = self(key, **kwargs)
 
         if not tasks_to_delete:
-            return ImmutableTaskList([])
+            return _ImmutableTaskList([])
 
         for t in tasks_to_delete:
             self.__remove(t, self.__root)
