@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import List, Tuple, Optional
 
 from pjplan import IWorkCalendar, DEFAULT_CALENDAR
 
@@ -15,7 +14,7 @@ class IResource(ABC):
         self.name = name
 
     @abstractmethod
-    def available_hours_for_date(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> float:
         pass
 
     def get_nearest_availability_date(self, start_date: datetime, max_days=100) -> datetime:
@@ -27,7 +26,7 @@ class IResource(ABC):
         """
         step = 0
         while step < max_days:
-            if self.available_hours_for_date(start_date) > 0:
+            if self.get_available_units(start_date) > 0:
                 return start_date
             start_date += timedelta(days=1)
             step += 1
@@ -43,8 +42,7 @@ class Resource(IResource):
     def __init__(
             self,
             name: str,
-            calendar: IWorkCalendar = DEFAULT_CALENDAR,
-            availability: List[Tuple[datetime, float]] = None
+            calendar: IWorkCalendar = DEFAULT_CALENDAR
     ):
         """
         :param name: уникальное наименование ресурса
@@ -60,31 +58,15 @@ class Resource(IResource):
         """
         super().__init__(name)
         self.calendar = calendar
-        self.availability = availability
 
-    def available_hours_for_date(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> float:
         """
         Возвращает количество доступных рабочих часов ресурса в указанную дату
         :param date: дата
         :return: количество доступных часов ресурса
         """
 
-        available_hours = self.calendar.get_available_units(date)
-        if available_hours == 0:
-            return 0
-
-        # Определяем ближайший интервал доступности ресурса
-        usage: Optional[Tuple[datetime, float]] = None
-        for u in self.availability:
-            if u[0] > date:
-                continue
-            if usage is None or usage[0] < u[0]:
-                usage = u
-
-        if usage is None:
-            return 0
-
-        return available_hours * usage[1] / 100
+        return self.calendar.get_available_units(date)
 
 
-DEFAULT_RESOURCE = Resource("default", DEFAULT_CALENDAR, [(datetime(1970, 1, 1), 100)])
+DEFAULT_RESOURCE = Resource("default")

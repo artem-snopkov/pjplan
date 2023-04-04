@@ -13,13 +13,10 @@ class TestWeeklyCalendar(unittest.TestCase):
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[0, 1, 2, 3, 4]))
         # No days
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(units_per_day=8))
-        # Only exceptions
-        self.assertRaises(RuntimeError, lambda: WeeklyCalendar(exceptions={}))
         # days out of range
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[9], units_per_day=8))
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[-1], units_per_day=8))
         # hours out of range
-        self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[1], units_per_day=25))
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[1], units_per_day=-1))
         # hours_per_pay is map and days
         self.assertRaises(RuntimeError, lambda: WeeklyCalendar(days=[1], units_per_day={1: 8}))
@@ -47,8 +44,3 @@ class TestWeeklyCalendar(unittest.TestCase):
         self.assertEqual(5, cal.get_available_units(datetime(2023, 4, 7)))
         self.assertEqual(0, cal.get_available_units(datetime(2023, 4, 8)))
         self.assertEqual(0, cal.get_available_units(datetime(2023, 4, 9)))
-
-    def test_get_available_hours_3(self):
-        cal = WeeklyCalendar(days=[0, 1, 2, 3, 4], units_per_day=8, exceptions={datetime(2023, 4, 3): 2})
-
-        self.assertEqual(2, cal.get_available_units(datetime(2023, 4, 3)))

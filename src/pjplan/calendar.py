@@ -98,7 +98,7 @@ def _repr_standard_calendars(self, calendars: Iterable['IWorkCalendar'], op: str
     elif k == 'DirectCalendar':
         return _repr_direct_calendar(self, v[0].dates)
 
-    return _repr_calendar_op(self.__calendars, op)
+    return _repr_calendar_op(calendars, op)
 
 
 def _repr_interval(start: Optional[datetime], end: Optional[datetime]):
@@ -333,11 +333,13 @@ class WeeklyCalendar(IWorkCalendar):
     ):
         WeeklyCalendar.__check_working_days(days)
 
-        if days is not None:
-            if units_per_day is None:
-                raise RuntimeError("units_per_day not specified")
+        if units_per_day is None:
+            raise RuntimeError("units_per_day not specified")
 
+        if days is not None:
             if type(units_per_day) is float or type(units_per_day) is int:
+                if units_per_day < 0:
+                    raise RuntimeError("units_per_day < 0")
                 self.__day_hours = {}
                 for i in range(0, 7):
                     self.__day_hours[i] = units_per_day if i in days else 0
@@ -345,13 +347,13 @@ class WeeklyCalendar(IWorkCalendar):
                 raise RuntimeError("If units_per_day specified as dict, working_days must be None")
 
         else:
-            if units_per_day is None:
-                raise RuntimeError("units_per_day not specified")
-
             if type(units_per_day) is dict:
                 self.__day_hours = {}
                 for i in range(0, 7):
-                    self.__day_hours[i] = units_per_day[i] if i in units_per_day else 0
+                    val = units_per_day[i] if i in units_per_day else 0
+                    if val < 0:
+                        raise RuntimeError("units_per_day < 0")
+                    self.__day_hours[i] = val
             else:
                 raise RuntimeError("If units_per_day specified as int or float, working_dates must be set")
 

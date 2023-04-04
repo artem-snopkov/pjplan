@@ -72,9 +72,9 @@ class DefaultScheduler(IScheduler):
         d = resource.get_nearest_availability_date(start_date)
 
         for i in range(0, 1000):
-            available = resource.available_hours_for_date(d) - resource_usage.usage(resource.name, d)
+            available = resource.get_available_units(d) - resource_usage.usage(resource.name, d)
             if available > 0:
-                percent = 1 - available / resource.available_hours_for_date(d)
+                percent = 1 - available / resource.get_available_units(d)
                 d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) + timedelta(hours=24 * percent)
                 return d
             d += timedelta(days=1)
@@ -98,7 +98,7 @@ class DefaultScheduler(IScheduler):
         days = 0
         while left_hours > 0:
             date += timedelta(days=1)
-            max_available = resource.available_hours_for_date(date) - resource_usage.usage(resource.name, date)
+            max_available = resource.get_available_units(date) - resource_usage.usage(resource.name, date)
             if max_available > 0:
                 left_hours -= resource_usage.reserve(resource.name, date, min(left_hours, max_available))
             days += 1
@@ -107,7 +107,7 @@ class DefaultScheduler(IScheduler):
                 raise RuntimeError("Can't calculate")
 
         reserved = resource_usage.usage(resource.name, date)
-        percent = reserved / resource.available_hours_for_date(date)
+        percent = reserved / resource.get_available_units(date)
         date += timedelta(hours=24 * percent)
 
         return date
