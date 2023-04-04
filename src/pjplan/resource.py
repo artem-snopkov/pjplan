@@ -69,7 +69,7 @@ class Resource(IResource):
         :return: количество доступных часов ресурса
         """
 
-        available_hours = self.calendar.get_available_hours(date)
+        available_hours = self.calendar.get_available_units(date)
         if available_hours == 0:
             return 0
 
