@@ -62,15 +62,13 @@ def tasks_to_raws(tasks: Iterable) -> List[TaskRaw]:
             '_Task__wbs'
         }
         for k in t.__dict__.keys():
-            if k not in keys_to_gnore and k not in raw.__dict__:
+            if not k.startswith('_') and k not in raw.__dict__:
                 raw.__setattr__(k, t.__getattribute__(k))
 
         raws.append(raw)
 
     return raws
 
-def __add_task_to_wbs(task: Task, wbs: WBS):
-    wbs.app
 
 def raws_to_wbs(raws: List[TaskRaw]) -> WBS:
     tasks_by_id = {}
@@ -87,7 +85,7 @@ def raws_to_wbs(raws: List[TaskRaw]) -> WBS:
         )
 
         for k in raw.__dict__.keys():
-            if k not in t.__dict__:
+            if k not in dir(t):
                 t.__setattr__(k, raw.__getattribute__(k))
 
         tasks_by_id[t.id] = t
@@ -108,7 +106,7 @@ def raws_to_wbs(raws: List[TaskRaw]) -> WBS:
 
     wbs = WBS()
     for r in roots:
-        wbs.append(r)
+        wbs.roots.append(r)
 
     for raw in raws:
         task = wbs(raw.id)

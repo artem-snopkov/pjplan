@@ -201,6 +201,8 @@ class _ImmutableTaskList:
     def __get_task_attribute(t: 'Task', attribute_name: str):
         if attribute_name == 'parent_id':
             return t.parent.id if t.parent else None
+        if attribute_name == 'id':
+            return t.id
         return t.__getattribute__(attribute_name) if attribute_name in t.__dict__ else None
 
     def __call__(
@@ -280,6 +282,22 @@ class _ImmutableTaskList:
             tasks = [t for t in self._list]
             for t in tasks:
                 t.__setattr__(key, value)
+
+    def __getattr__(self, attr):
+        """
+        Returns list of all attr values for tasks in list
+        Attribute values returns in same order as tasks follows in list
+        If task has no attribete with name attr, None returns
+        :param attr: attribute name
+        :return: list of all attr values for tasks in list
+        """
+        res = []
+        for t in self._list:
+            if attr in dir(t) and not attr.startswith('_'):
+                res.append(t.__getattribute__(attr))
+            else:
+                res.append(None)
+        return res
 
     def __len__(self) -> int:
         """
@@ -563,7 +581,7 @@ class Task:
         :param successors: successor tasks
         :param kwargs: additional task attributes
         """
-        self.id = id
+        self.__id = id
         self.name = name
         self.resource = resource
         self.start = start
@@ -597,6 +615,10 @@ class Task:
         self.__wbs = wbs
         for ch in self.children:
             ch._attach(wbs)
+
+    @property
+    def id(self):
+        return self.__id
 
     @property
     def parent(self) -> Optional['Task']:
@@ -812,7 +834,8 @@ class Task:
     def __to_dict(self):
         d = {}
         for k in self.__dict__.keys():
-            d[k] = self.__getattribute__(k)
+            if not k.startswith('_'):
+                d[k] = self.__getattribute__(k)
         return d
 
     def to_dict(self):
@@ -824,12 +847,10 @@ class Task:
 
     def clone(self, **kwargs) -> 'Task':
         """Creates copy of this task without parent/children/successors/predecessors"""
-        cloned = Task(id=self.id, name=self.name)
-
-        keys_to_gnore = {'_Task__parent', '_Task__children', '_Task__predecessors', '_Task__successors', '_Task__wbs'}
+        cloned = Task(id=self.id)
 
         for k in self.__dict__.keys():
-            if k not in keys_to_gnore:
+            if not k.startswith('_'):
                 cloned.__setattr__(k, self.__getattribute__(k))
 
         for k, v in kwargs.items():
@@ -924,13 +945,6 @@ class WBS:
             return max(ends)
         return None
 
-    def append(self, task: Task):
-        """Append task to root of WBS"""
-        self.__root.children.append(task)
-
-    def insert(self, index: int, task: Task) -> bool:
-        return self.__root.children.insert(index, task);
-
     def __remove(self, task_to_remove: Task, current: Task):
         if task_to_remove is None:
             return False
@@ -1021,9 +1035,9 @@ class WBS:
 
         cloned_project = WBS()
         cloned_project.roots = [cloned_tasks[r.id] for r in roots]
-        keys_to_gnore = {'_WBS__roots', '_WBS__root'}
+
         for k in self.__dict__.keys():
-            if k not in keys_to_gnore:
+            if not k.startswith('_'):
                 cloned_project.__setattr__(k, self.__getattribute__(k))
 
         return cloned_project

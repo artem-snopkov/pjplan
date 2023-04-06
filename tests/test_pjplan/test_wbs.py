@@ -243,7 +243,7 @@ class TestWBS(TestCase):
         t1 // Task(2)
 
         wbs = WBS()
-        wbs.append(t1)
+        wbs.roots.append(t1)
 
         self.assertEqual(1, len(wbs.roots))
         self.assertEqual(2, len(wbs))
@@ -252,7 +252,16 @@ class TestWBS(TestCase):
     def test_detached_7(self):
         t1 = WBS() // Task(1)
 
-        self.assertRaises(RuntimeError, lambda: WBS().append(t1))
+        self.assertRaises(RuntimeError, lambda: WBS().roots.append(t1))
+
+    def test_list_get_attr(self):
+        with WBS() as project:
+            project // Task(1, attr=1)
+            project // Task(2, attr="Hello")
+            project // Task(3)
+
+        self.assertEqual([1, "Hello", None], project.roots.attr)
+        self.assertEqual([1, 2, 3], project.roots.id)
 
     def test_subtree(self):
         with WBS() as wbs:
