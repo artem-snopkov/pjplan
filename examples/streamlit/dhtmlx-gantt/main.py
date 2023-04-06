@@ -50,13 +50,13 @@ if __name__ == '__main__':
 
     with WBS() as prj:
         prj // Task(2, 'Задача 1', estimate=40, spent=20, resource='Tester')
-        prj // Task(3, 'Задача 2', predecessors=[prj(2)], estimate=20, resource='Tester')
+        prj // Task(3, 'Задача 2', predecessors=[prj[2]], estimate=20, resource='Tester')
         with prj // Task(4, 'Задача 4') as t:
-            t // Task(5, 'Задача 5', predecessors=[prj(3)], estimate=100)
-            t // Task(6, 'Задача 6', predecessors=[prj(3)], estimate=50)
+            t // Task(5, 'Задача 5', predecessors=[prj[3]], estimate=100)
+            t // Task(6, 'Задача 6', predecessors=[prj[3]], estimate=50)
         with prj // Task(7, 'Задача 7') as t:
-            t // Task(8, 'Задача 8', predecessors=[prj(6)], estimate=16)
-            t // Task(9, 'Задача 9', predecessors=[prj(6)], estimate=16)
+            t // Task(8, 'Задача 8', predecessors=[prj[6]], estimate=16)
+            t // Task(9, 'Задача 9', predecessors=[prj[6]], estimate=16)
 
     plan, usage = DefaultScheduler(datetime.now()).calc(prj)
 

@@ -1,36 +1,85 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import List, Dict, Union, Set
 
 from pjplan import Task, WBS, IResource, DEFAULT_RESOURCE
+from pjplan.utils import TextTable, GREEN, BLUE, YELLOW, GREY, RED
 
 
 class ResourceUsage:
     """Отчет об использовании ресурсов"""
 
     def __init__(self):
-        self.__usage: Dict[str, Dict[datetime, float]] = {}
+        self.__usage: Dict[IResource, Dict[datetime, float]] = {}
 
     @staticmethod
     def __get_key(date: datetime):
         return datetime(date.year, date.month, date.day, 0, 0, 0, 0)
 
-    def reserve(self, resource_name: str, date: datetime, amount: float) -> float:
-        resource_usage_dict = self.__usage.setdefault(resource_name, {})
+    def reserve(self, resource: IResource, date: datetime, amount: float) -> float:
+        resource_usage_dict = self.__usage.setdefault(resource, {})
         key = self.__get_key(date)
         resource_usage_dict[key] = resource_usage_dict.setdefault(key, 0) + amount
         return amount
 
-    def usage(self, resource_name: str, date: datetime = None) -> Union[float, Dict[datetime, float]]:
-        resource_usage_dict = self.__usage.setdefault(resource_name, {})
+    def usage(self, resource: IResource, date: datetime = None) -> Union[float, Dict[datetime, float]]:
+        resource_usage_dict = self.__usage.setdefault(resource, {})
         if not date:
             return resource_usage_dict
         return resource_usage_dict.setdefault(self.__get_key(date), 0)
 
+    def rows(self):
+        dates = []
+        for v in self.__usage.values():
+            dates += v.keys()
+
+        min_date = min(dates)
+        max_date = max(dates)
+
+        res = []
+        d = min_date
+        while d < max_date:
+            row = {
+                'date': d
+            }
+            res.append(row)
+
+            for k in self.__usage.keys():
+                row[k.name] = self.usage(k, d)
+            d += timedelta(days=1)
+
+        return res
+
     def __repr__(self):
-        # TODO визуализоровать
-        return ""
+        dates = []
+        for v in self.__usage.values():
+            dates += v.keys()
+
+        min_date = min(dates)
+        max_date = max(dates)
+
+        table = TextTable()
+        table.new_row()
+        table.new_cell('DATE', RED)
+        for k in self.__usage.keys():
+            table.new_cell(k.name.upper(), RED)
+
+        d = min_date
+        while d < max_date:
+            table.new_row()
+            table.new_cell(d.strftime('%y-%m-%d'))
+            for k in self.__usage.keys():
+                val = self.usage(k, d)
+                if val == 0:
+                    color = GREY
+                elif val == k.get_available_units(d):
+                    color = GREEN
+                else:
+                    color = YELLOW
+                table.new_cell(f"{val:.1f}", color)
+            d += timedelta(days=1)
+
+        return table.text_repr(True)
 
 
 class IScheduler(ABC):
@@ -44,12 +93,6 @@ class IScheduler(ABC):
         :return: Tuple (<копия wbs с установленными start и end у всех Task>, <Отчет об использовании ресурсов>)
         """
         pass
-
-
-@dataclass
-class Sprint:
-    name: str = None
-    start_date: datetime = None
 
 
 class DefaultScheduler(IScheduler):
@@ -72,7 +115,7 @@ class DefaultScheduler(IScheduler):
         d = resource.get_nearest_availability_date(start_date)
 
         for i in range(0, 1000):
-            available = resource.get_available_units(d) - resource_usage.usage(resource.name, d)
+            available = resource.get_available_units(d) - resource_usage.usage(resource, d)
             if available > 0:
                 percent = 1 - available / resource.get_available_units(d)
                 d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) + timedelta(hours=24 * percent)
@@ -98,15 +141,15 @@ class DefaultScheduler(IScheduler):
         days = 0
         while left_hours > 0:
             date += timedelta(days=1)
-            max_available = resource.get_available_units(date) - resource_usage.usage(resource.name, date)
+            max_available = resource.get_available_units(date) - resource_usage.usage(resource, date)
             if max_available > 0:
-                left_hours -= resource_usage.reserve(resource.name, date, min(left_hours, max_available))
+                left_hours -= resource_usage.reserve(resource, date, min(left_hours, max_available))
             days += 1
 
             if days > 1000:
                 raise RuntimeError("Can't calculate")
 
-        reserved = resource_usage.usage(resource.name, date)
+        reserved = resource_usage.usage(resource, date)
         percent = reserved / resource.get_available_units(date)
         date += timedelta(hours=24 * percent)
 
@@ -176,7 +219,7 @@ class DefaultScheduler(IScheduler):
 
     @staticmethod
     def __prepare_tasks(project: WBS):
-        for t in project:
+        for t in project.tasks:
             if len(t.children) > 0:
                 t.start = t.end = None
 
@@ -194,7 +237,7 @@ class DefaultScheduler(IScheduler):
 
     @staticmethod
     def __validate_graph_isolation(project: WBS):
-        all_tasks = {task.id: task for task in project}
+        all_tasks = {task.id: task for task in project.tasks}
 
         for t in all_tasks.values():
             for pr in t.predecessors:
@@ -203,7 +246,7 @@ class DefaultScheduler(IScheduler):
 
     def __check_loops(self, project: WBS):
         validated = set()
-        for t in project:
+        for t in project.tasks:
             self.__check_loops_from_task(t, set(), validated)
 
     def __check_loops_from_task(self, task: Task, visited_tasks: Set[int], validated: Set[int]):

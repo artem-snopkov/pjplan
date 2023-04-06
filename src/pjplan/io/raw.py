@@ -109,10 +109,10 @@ def raws_to_wbs(raws: List[TaskRaw]) -> WBS:
         wbs.roots.append(r)
 
     for raw in raws:
-        task = wbs(raw.id)
+        task = wbs[raw.id]
 
         for predecessor_id in raw.predecessor_ids:
-            predecessor_task = wbs(predecessor_id)
+            predecessor_task = wbs[predecessor_id]
             if predecessor_task is not None:
                 task.predecessors.append(predecessor_task)
 

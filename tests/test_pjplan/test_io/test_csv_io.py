@@ -54,20 +54,20 @@ class TestCsvIO(TestCase):
 
         r = read_csv(file)
 
-        self.assertTasksEqual(t1, r(1))
+        self.assertTasksEqual(t1, r[1])
 
-        self.assertTasksEqual(t2, r(2))
-        self.assertTrue(r(2) in r(1).children)
-        self.assertTrue(r(1) == r(2).parent)
+        self.assertTasksEqual(t2, r[2])
+        self.assertTrue(r[2] in r[1].children)
+        self.assertTrue(r[1] == r[2].parent)
 
-        self.assertTasksEqual(t3, r(3))
-        self.assertTrue(r(3) in r(2).successors)
-        self.assertTrue(r(2) in r(3).predecessors)
+        self.assertTasksEqual(t3, r[3])
+        self.assertTrue(r[3] in r[2].successors)
+        self.assertTrue(r[2] in r[3].predecessors)
 
-        self.assertTasksEqual(t4, r(4))
+        self.assertTasksEqual(t4, r[4])
 
-        self.assertTasksEqual(t5, r(5))
-        self.assertTasksEqual(t6, r(6))
-        self.assertTasksEqual(t7, r(7))
-        self.assertTasksEqual(t8, r(8))
-        self.assertTasksEqual(t9, r(9))
+        self.assertTasksEqual(t5, r[5])
+        self.assertTasksEqual(t6, r[6])
+        self.assertTasksEqual(t7, r[7])
+        self.assertTasksEqual(t8, r[8])
+        self.assertTasksEqual(t9, r[9])

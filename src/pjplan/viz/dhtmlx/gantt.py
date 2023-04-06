@@ -74,7 +74,7 @@ class DhtmlxGantt:
     def __task_classes(self) -> Tuple[str, dict]:
 
         bar_styles = {}
-        for t in self.wbs:
+        for t in self.wbs.tasks:
             if 'gantt_bar_style' in t.__dict__:
                 bar_styles.setdefault(str(t.gantt_bar_style), (t.gantt_bar_style, []))[1].append(t.id)
 
@@ -116,7 +116,7 @@ class DhtmlxGantt:
         links = []
 
         link_id = 0
-        for _root in self.wbs:
+        for _root in self.wbs.tasks:
             for t in _root.all_children + [_root]:
 
                 progress = 0
@@ -133,7 +133,7 @@ class DhtmlxGantt:
                     'end_date': t.end.strftime("%d-%m-%Y %H:%M"),
                     'resource': t.resource,
                     'open': t.gantt_open if 'gantt_open' in t.__dict__ else 'true',
-                    'parent': t.parent.id if t.parent and t.parent in self.wbs else 0,
+                    'parent': t.parent.id if t.parent and t.parent in self.wbs.tasks else 0,
                     'progress': progress,
                     'css_class': task_classes.get(t.id)
                 }

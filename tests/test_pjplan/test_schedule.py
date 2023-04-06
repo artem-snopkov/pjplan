@@ -15,10 +15,10 @@ class TestDefaultScheduler(TestCase):
 
         s, usage = pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p)
 
-        self.assertEqual(p(3).start, s(2).start)
-        self.assertEqual(p(3).start, s(1).start)
-        self.assertEqual(p(3).end, s(2).end)
-        self.assertEqual(p(3).end, s(1).end)
+        self.assertEqual(p[3].start, s[2].start)
+        self.assertEqual(p[3].start, s[1].start)
+        self.assertEqual(p[3].end, s[2].end)
+        self.assertEqual(p[3].end, s[1].end)
 
     def test_calc_2(self):
         """
@@ -31,10 +31,10 @@ class TestDefaultScheduler(TestCase):
 
         s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
 
-        self.assertEqual(datetime(2025, 1, 1), s(1).start)
-        self.assertEqual(datetime(2025, 1, 2, 6), s(1).end)
-        self.assertEqual(datetime(2025, 1, 2, 6), s(2).start)
-        self.assertEqual(datetime(2025, 1, 6, 6), s(2).end)
+        self.assertEqual(datetime(2025, 1, 1), s[1].start)
+        self.assertEqual(datetime(2025, 1, 2, 6), s[1].end)
+        self.assertEqual(datetime(2025, 1, 2, 6), s[2].start)
+        self.assertEqual(datetime(2025, 1, 6, 6), s[2].end)
 
     def test_calc_3(self):
         """
@@ -47,29 +47,29 @@ class TestDefaultScheduler(TestCase):
 
         s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
 
-        self.assertEqual(datetime(2025, 1, 1), s(1).start)
-        self.assertEqual(datetime(2025, 1, 2), s(1).end)
-        self.assertEqual(datetime(2025, 1, 1), s(2).start)
-        self.assertEqual(datetime(2025, 1, 3), s(2).end)
+        self.assertEqual(datetime(2025, 1, 1), s[1].start)
+        self.assertEqual(datetime(2025, 1, 2), s[1].end)
+        self.assertEqual(datetime(2025, 1, 1), s[2].start)
+        self.assertEqual(datetime(2025, 1, 3), s[2].end)
 
     def test_calc_4(self):
         p = WBS()
         p // Task(1, estimate=8, resource='default')
-        p(1) >> p // Task(2, 'ms', milestone=True)
+        p[1] >> p // Task(2, 'ms', milestone=True)
 
         s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
 
-        self.assertEqual(datetime(2025, 1, 2), s(1).end)
-        self.assertEqual(datetime(2025, 1, 2), s(2).start)
+        self.assertEqual(datetime(2025, 1, 2), s[1].end)
+        self.assertEqual(datetime(2025, 1, 2), s[2].start)
 
     def test_calc_5(self):
         p = WBS()
         p // Task(1, estimate=8, resource='default')
         p // Task(2, estimate=8)
 
-        p(2) >> p(1)
+        p[2] >> p[1]
 
         s, usage = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p)
 
-        self.assertEqual(datetime(2025, 1, 1), s(2).start)
-        self.assertEqual(datetime(2025, 1, 2), s(1).start)
+        self.assertEqual(datetime(2025, 1, 1), s[2].start)
+        self.assertEqual(datetime(2025, 1, 2), s[1].start)

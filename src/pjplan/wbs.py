@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional, Union, Iterable, Callable, Any
 
-from pjplan.utils import GREEN, GREY, RED, PINK, YELLOW, TEAL, BLUE, colored
+from pjplan.utils import GREEN, GREY, RED, PINK, YELLOW, TEAL, BLUE, colored, TextTable
 
 _ROOT_ID = sys.maxsize
 
@@ -68,7 +68,7 @@ class _Repr:
     """Utility class for print task sheets"""
 
     __DEFAULT_THEME = {
-        'header_color': GREEN,
+        'header_color': RED,
         'level_colors': [BLUE, TEAL, YELLOW, PINK, RED, GREY]
     }
 
@@ -102,6 +102,8 @@ class _Repr:
             return '[' + _Repr.__get_linked_tasks_id(t, t.successors) + ']'
         if field == 'parent':
             return _Repr.__get_linked_task_id(t, t.parent)
+        if field == 'id':
+            return str(t.id)
 
         if field not in t.__dict__:
             field = field.lower()
@@ -127,7 +129,7 @@ class _Repr:
         return max_len
 
     @staticmethod
-    def __print_task_subtree(task: 'Task', fields: Iterable[str], level, fmt, children, theme):
+    def __print_task_subtree(task: 'Task', fields: Iterable[str], level, table: TextTable, children, theme):
         values = []
         for f in fields:
             if f == 'name':
@@ -138,15 +140,19 @@ class _Repr:
         if 'print_color' in task.__dict__:
             color = task.print_color
         else:
-            colors = theme['level_colors']
-            color = colors[level] if level < len(colors) else _Repr.__grey
+            color = None
 
-        res = colored(fmt.format(*values), color) + '\n'
+        if color is None:
+            colors = theme['level_colors']
+            color = colors[level] if level < len(colors) else GREY
+
+        table.new_row(color)
+        for v in values:
+            table.new_cell(v)
+
         if children:
             for ch in task.children:
-                res += _Repr.__print_task_subtree(ch, fields, level + 1, fmt, children, theme)
-
-        return res
+                _Repr.__print_task_subtree(ch, fields, level + 1, table, children, theme)
 
     @staticmethod
     def repr(tasks: Iterable['Task'], fields: Iterable[str] = None, children=True, theme: dict = None):
@@ -156,29 +162,17 @@ class _Repr:
         if theme is None:
             theme = _Repr.__DEFAULT_THEME
 
-        max_title_len = 0
-        for _t in tasks:
-            max_title_len = max(max_title_len, _Repr.__calc_max_title_len(_t, 0, 0))
+        header_color = theme['header_color'] if 'header_color' in theme else GREY
 
-        fmt = ""
-        for f in fields:
-            if len(fmt) > 0:
-                fmt += "  "
-            if f.lower() == 'name':
-                fmt += f"{{:{max_title_len}}}"
-            else:
-                fmt += f"{{:{_Repr.__max_field_len(tasks, f)}}}"
-
-        title = [s.upper() for s in fields]
-
-        color = theme['header_color'] if 'header_color' in theme else _Repr.__grey
-
-        res = colored(fmt.format(*title), color) + '\n'
+        table = TextTable()
+        table.new_row(header_color)
+        for s in fields:
+            table.new_cell(s.upper())
 
         for _task in tasks:
-            res += _Repr.__print_task_subtree(_task, fields, 0, fmt, children, theme)
+            _Repr.__print_task_subtree(_task, fields, 0, table, children, theme)
 
-        return res
+        return table.text_repr()
 
 
 class _ImmutableTaskList:
@@ -207,7 +201,7 @@ class _ImmutableTaskList:
 
     def __call__(
             self,
-            key: Union[int, Callable[['Task'], bool]] = None,
+            key: Optional[Callable[['Task'], bool]] = None,
             **kwargs
     ) -> Union[Optional['Task'], '_ImmutableTaskList']:
         """
@@ -217,8 +211,6 @@ class _ImmutableTaskList:
         :return: list of matched tasks
         """
         if key is not None:
-            if type(key) is int:
-                return next((t for t in self if t.id == key), None)
             if callable(key):
                 return _ImmutableTaskList([t for t in self if key(t)])
             raise RuntimeError(f"Unsupported key type: {type(key)}")
@@ -276,7 +268,7 @@ class _ImmutableTaskList:
         :param value: attribute value
         :return:
         """
-        if key.startswith('__') > 0 or key.startswith('_'):
+        if key.startswith('_'):
             super().__setattr__(key, value)
         else:
             tasks = [t for t in self._list]
@@ -417,16 +409,19 @@ class _ChildrenList(_TaskList):
         if len(self) > 0:
             self.move(task, before=self[index])
 
-    def move(self, task: 'Task', before: Optional['Task'] = None, after: Optional['Task'] = None) -> None:
+    def move(self, tasks: Union['Task', Iterable['Task']], before: Optional['Task'] = None, after: Optional['Task'] = None) -> None:
         """
         Move task before or after another task
-        :param task: task to move
+        :param tasks: task or tasks to move
         :param before: task
         :param after: task
         :raises RuntimeError: if task/before/after does not exists in list
         """
-        if task not in self._list:
-            raise RuntimeError("'Task' not found in list")
+        tasks = _to_list(tasks)
+        for task in tasks:
+            if task not in self._list:
+                raise RuntimeError("'Task' not found in list")
+
         if before is not None and before not in self._list:
             raise RuntimeError("'Before' not found in list")
         if after is not None and after not in self._list:
@@ -434,13 +429,14 @@ class _ChildrenList(_TaskList):
         if before is not None and after is not None:
             raise RuntimeError("'Before' and 'After' is not None. Only one parameter must be set")
 
-        self._list.remove(task)
-        if before is not None:
-            self._list.insert(self._list.index(before), task)
-        elif after is not None:
-            self._list.insert(self._list.index(after) + 1, task)
-        else:
-            raise RuntimeError("'Before' or 'After' must be not None")
+        for task in tasks:
+            self._list.remove(task)
+            if before is not None:
+                self._list.insert(self._list.index(before), task)
+            elif after is not None:
+                self._list.insert(self._list.index(after) + 1, task)
+            else:
+                raise RuntimeError("'Before' or 'After' must be not None")
 
         self.__setter(self._list)
 
@@ -831,15 +827,11 @@ class Task:
 
         return [t for t in get_successor(self)]
 
-    def __to_dict(self):
-        d = {}
-        for k in self.__dict__.keys():
-            if not k.startswith('_'):
-                d[k] = self.__getattribute__(k)
-        return d
-
     def to_dict(self):
-        d = {}
+        d = {
+            'id': self.id
+        }
+
         for k in self.__dict__.keys():
             if not k.startswith('_'):
                 d[k] = self.__getattribute__(k)
@@ -874,7 +866,7 @@ class Task:
         return other
 
     def __str__(self):
-        return str(self.__to_dict())
+        return str(self.to_dict())
 
     def __enter__(self):
         return self
@@ -930,6 +922,11 @@ class WBS:
         self.__root.children = value
 
     @property
+    def tasks(self):
+        """List of all tasks in WBS"""
+        return self.__root.all_children
+
+    @property
     def start(self):
         """Returns min start date from all tasks in WBS"""
         starts = [t.start for t in self.roots if t.start is not None]
@@ -968,14 +965,14 @@ class WBS:
 
         return self.__remove(task, self.__root)
 
-    def remove_all(self, key: Union[int, Callable[['Task'], bool]] = None, **kwargs):
+    def remove_all(self, key: Optional[Callable[['Task'], bool]] = None, **kwargs):
         """
         Remove all tasks matched to key from WBS.
         :param key: see TaskList.remove_all for details
         :param kwargs: see TaskList.remove_all for details
         :return: list of deleted tasks
         """
-        tasks_to_delete = self(key, **kwargs)
+        tasks_to_delete = self.tasks(key, **kwargs)
 
         if not tasks_to_delete:
             return _ImmutableTaskList([])
@@ -985,17 +982,11 @@ class WBS:
 
         return tasks_to_delete
 
-    def __len__(self):
-        return len(self.__root.all_children)
-
     def __getitem__(self, item):
-        return self.__root.all_children[item]
-
-    def __iter__(self):
-        return iter(self.__root.all_children)
-
-    def __call__(self, key=None, **kwargs):
-        return self.__root.all_children(key, **kwargs)
+        try:
+            return next((t for t in self.__root.all_children if t.id == item))
+        except StopIteration:
+            raise RuntimeError(f"Task with id={item} not found")
 
     def __floordiv__(self, other: Union['Task', Iterable['Task']]):
         return self.__root // other

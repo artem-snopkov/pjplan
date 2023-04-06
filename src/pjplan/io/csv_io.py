@@ -88,7 +88,7 @@ def read_csv(path: str, encoding='utf-8', delimiter=';') -> WBS:
 
 
 def write_csv(wbs: WBS, path: str, encoding='utf-8', delimiter=';'):
-    raws = tasks_to_raws(wbs)
+    raws = tasks_to_raws(wbs.tasks)
 
     with open(path, mode='w', encoding=encoding, newline='\n') as output_file:
         csvwriter = csv.writer(output_file, delimiter=delimiter)

@@ -1,7 +1,7 @@
 from html import escape
 from string import Template
 import importlib.resources as pkg_resources
-from pjplan import Task, WBS
+from pjplan import WBS
 
 
 class MermaidNetwork:
@@ -21,7 +21,7 @@ class MermaidNetwork:
     def __src(self):
 
         res = "flowchart LR\n"
-        for t in self.wbs:
+        for t in self.wbs.tasks:
             t_name = t.name.replace('"', '')
             if len(t.predecessors) == 0:
                 res += f"  0((Start)) --> {t.id}{{{{{t_name}}}}}\n"
@@ -30,7 +30,7 @@ class MermaidNetwork:
                     p_name = p.name.replace('"', '')
                     res += f"  {p.id}{{{{{p_name}}}}} --> {t.id}{{{{{t_name}}}}}\n"
 
-        for t in self.wbs:
+        for t in self.wbs.tasks:
             if 'network_bar_style' in t.__dict__:
                 res += f'style {t.id} {self.__dict_to_style(t.network_bar_style)}\n'
 

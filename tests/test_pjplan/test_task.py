@@ -125,10 +125,6 @@ class TestTask(TestCase):
         self.assertEqual(2, t1.children[0].id)
         self.assertEqual(3, t1.children[1].id)
 
-        # Поиск по айди
-        v = t1.children(2)
-        self.assertEqual(2, v.id)
-
         # Поиск по нескольким айди
         v2, v3 = t1.children(id_in_=[2, 3])
         self.assertEqual(2, v2.id)
@@ -189,7 +185,8 @@ class TestTask(TestCase):
 
         self.assertEqual(1, len(t1.children))
         self.assertEqual(2, len(t1.all_children))
-        self.assertEqual(3, t1.all_children(3).id)
+        self.assertEqual(2, t1.all_children[0].id)
+        self.assertEqual(3, t1.all_children[1].id)
 
     def test_predecessors(self):
         with WBS() as wbs:
@@ -203,7 +200,7 @@ class TestTask(TestCase):
         t4.predecessors += [t2, t3]
 
         self.assertEqual(2, len(t4.predecessors))
-        self.assertEqual(2, t4.predecessors(2).id)
+        self.assertEqual(2, t4.predecessors[0].id)
         self.assertEqual(t4, t2.successors[0])
         self.assertEqual(t4, t3.successors[0])
 
@@ -260,7 +257,7 @@ class TestTask(TestCase):
         self.assertEqual(3, t4.predecessors[0].id)
 
         self.assertEqual(2, len(t4.all_predecessors))
-        self.assertEqual(2, t4.all_predecessors(2).id)
+        self.assertEqual(2, t4.all_predecessors[1].id)
 
     def test_lshift(self):
         t1 = Task(id=1, name='1')
@@ -289,3 +286,11 @@ class TestTask(TestCase):
 
         self.assertEqual(2, root.children[0].id)
         self.assertEqual(3, root.children[0].children[0].id)
+
+    def test_to_dict(self):
+        t = Task(1, "name")
+
+        d = t.to_dict()
+
+        self.assertEqual(1, d['id'])
+        self.assertEqual("name", d['name'])

@@ -33,7 +33,7 @@ class MermaidGantt:
     def __styles(self):
         bar_styles = {}
         text_styles = {}
-        for t in self.wbs:
+        for t in self.wbs.tasks:
             if 'gantt_bar_style' in t.__dict__:
                 bar_styles.setdefault(self.__dict_to_css(t.gantt_bar_style), []).append(t.id)
             if 'gantt_text_style' in t.__dict__:
@@ -78,7 +78,7 @@ class MermaidGantt:
         if self.tick_interval:
             res += "  tickInterval {}\n".format(self.tick_interval)
 
-        tasks = self.wbs
+        tasks = self.wbs.tasks
 
         sections = set([task.gantt_section if 'gantt_section' in task.__dict__ else '-' for task in tasks])
         if len(sections) == 1:

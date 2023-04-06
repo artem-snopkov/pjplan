@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Dict, Optional, Union, Iterable, Callable
 
-from pjplan.utils import colored, GREEN, GREY
+from pjplan.utils import colored, GREEN, GREY, TextTable
 
 _WEEK_DAY_NAMES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
@@ -12,7 +12,7 @@ def _day_start(d: datetime) -> datetime:
 
 
 def _repr_units(hours) -> str:
-    return f" {hours:.1f} "
+    return f"{hours:.1f}"
 
 
 def _repr_week_calendar(calendar: 'IWorkCalendar', start: datetime, end: datetime):
@@ -28,42 +28,38 @@ def _repr_week_calendar(calendar: 'IWorkCalendar', start: datetime, end: datetim
 
     res = 'Weekly: ' + _repr_interval(start, end) + '\n'
 
-    day_len = {}
-    for i in range(0, 7):
-        units = calendar.get_available_units(week_dates[i])
-        day_len[i] = max(5, len(_repr_units(units)))
+    table = TextTable()
 
-    res += "|"
+    table.new_row()
     for i in range(0, 7):
-        res += colored(f' {_WEEK_DAY_NAMES[i]} ' + ' ' * max(day_len[i] - 5, 0), GREEN) + '|'
-    res += '\n'
+        table.new_cell(_WEEK_DAY_NAMES[i], GREEN)
 
-    res += '|'
+    table.new_row()
     for i in range(0, 7):
         units = calendar.get_available_units(week_dates[i])
         val = _repr_units(units)
-        vl = len(val)
-        if units == 0:
-            val = colored(val, GREY)
-        res += val + ' ' * max(day_len[i] - vl, 0) + '|'
+        table.new_cell(val, GREY if units == 0 else None)
 
-    return res
+    return res + table.text_repr(True)
 
 
 def _repr_direct_calendar(calendar: 'IWorkCalendar', dates: Iterable[datetime]):
     res = 'Direct:\n'
-    res += '| ' + colored('DATE', GREEN) + '       | ' + colored('UNITS', GREEN) + ' |'
+
+    table = TextTable()
+    table.new_row()
+    table.new_cell('DATE', GREEN)
+    table.new_cell('UNITS', GREEN)
 
     for d in dates:
-        res += '\n| ' + d.strftime('%Y-%m-%d') + ' |'
+        table.new_row()
+        table.new_cell(d.strftime('%Y-%m-%d'))
+
         units = calendar.get_available_units(d)
         val = _repr_units(units)
-        vl = len(val)
-        if units == 0:
-            val = colored(val, GREY)
-        res += val + ' ' * max(7 - vl, 0) + '|'
+        table.new_cell(val, GREY if units == 0 else None)
 
-    return res
+    return res + table.text_repr(True)
 
 
 def _repr_calendar_op(calendars: Iterable['IWorkCalendar'], op: str):

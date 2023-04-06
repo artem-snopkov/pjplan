@@ -23,23 +23,25 @@ class TestWBS(TestCase):
         wbs // Task(1, "1", start=datetime(2022, 1, 1), end=datetime(2022, 2, 1))
         wbs // Task(2, "2", start=datetime(2023, 1, 1), end=datetime(2023, 2, 1))
 
-        self.assertEqual(wbs(1).start, wbs.start)
-        self.assertEqual(wbs(2).end, wbs.end)
+        self.assertEqual(wbs[1].start, wbs.start)
+        self.assertEqual(wbs[2].end, wbs.end)
 
     def test_iter(self):
         wbs = WBS()
         wbs // Task(1, "1")
         wbs // Task(2, "2")
 
-        tasks = [t for t in wbs]
+        tasks = [t for t in wbs.tasks]
         self.assertEqual(2, len(tasks))
 
-    def test_len(self):
+    def test_get_by_id(self):
         wbs = WBS()
         wbs // Task(1, "1")
         wbs // Task(2, "2")
 
-        self.assertEqual(2, len(wbs))
+        self.assertEqual("1", wbs[1].name)
+        self.assertEqual("2", wbs[2].name)
+        self.assertRaises(RuntimeError, lambda: wbs[3])
 
     def test_change_field(self):
         wbs = WBS()
@@ -47,10 +49,10 @@ class TestWBS(TestCase):
         wbs // Task(2, "2", resource='2')
         wbs // Task(3, "3", resource='2')
 
-        wbs(resource='2').resource='1'
+        wbs.tasks(resource='2').resource='1'
 
-        self.assertEqual('1', wbs(2).resource)
-        self.assertEqual('1', wbs(3).resource)
+        self.assertEqual('1', wbs[2].resource)
+        self.assertEqual('1', wbs[3].resource)
 
     def test_clone(self):
         prj = WBS()
@@ -59,25 +61,25 @@ class TestWBS(TestCase):
                 second // Task(3, "3", start=datetime(2022, 11, 1), end=datetime(2022, 12, 1), resource='Test')
 
         prj2 = prj.clone()
-        prj2(1).name = 'n1'
+        prj2[1].name = 'n1'
 
-        self.assertEqual('1', prj(1).name)
+        self.assertEqual('1', prj[1].name)
         self.assertEqual(1, len(prj2.roots))
-        self.assertEqual(len(prj), len(prj2))
-        self.assertIsNotNone(prj2(1))
-        self.assertIsNotNone(prj2(2))
-        self.assertIsNotNone(prj2(3))
+        self.assertEqual(len(prj.tasks), len(prj2.tasks))
+        self.assertIsNotNone(prj2[1])
+        self.assertIsNotNone(prj2[2])
+        self.assertIsNotNone(prj2[3])
 
     def test_append(self):
         prj = WBS()
         prj // Task(1)
 
-        self.assertEqual(1, len(prj))
+        self.assertEqual(1, len(prj.tasks))
 
     def test_append_duplicate_id(self):
         prj = WBS()
         prj // Task(1)
-        self.assertEqual(1, len(prj))
+        self.assertEqual(1, len(prj.tasks))
         self.assertRaises(RuntimeError, lambda: prj // Task(1))
 
     def test_append_duplicate_ids(self):
@@ -112,10 +114,10 @@ class TestWBS(TestCase):
         prj // Task(1)
         prj // Task(2)
 
-        prj.roots = [prj(1)]
+        prj.roots = [prj[1]]
 
-        self.assertEqual(1, len(prj))
-        self.assertEqual(1, prj[0].id)
+        self.assertEqual(1, len(prj.tasks))
+        self.assertEqual(1, prj.roots[0].id)
 
     def test_children_set_parent(self):
         with WBS() as prj:
@@ -126,9 +128,9 @@ class TestWBS(TestCase):
                     t3 // Task(5)
 
         prj.roots[0].children.parent = None
-        self.assertIsNone(prj(1).parent)
-        self.assertIsNone(prj(2).parent)
-        self.assertIsNone(prj(3).parent)
+        self.assertIsNone(prj[1].parent)
+        self.assertIsNone(prj[2].parent)
+        self.assertIsNone(prj[3].parent)
 
     def test_set_parent_none(self):
         prj = WBS()
@@ -146,8 +148,8 @@ class TestWBS(TestCase):
 
         Task(2).parent = t1
 
-        self.assertEqual(2, len(wbs))
-        self.assertEqual(2, wbs(2).id)
+        self.assertEqual(2, len(wbs.tasks))
+        self.assertEqual(2, wbs[2].id)
 
     def test_set_parent_from_children(self):
         with WBS() as wbs:
@@ -190,7 +192,7 @@ class TestWBS(TestCase):
         prj // Task(1, '1')
         prj // Task(2, '2')
 
-        prj.roots.move(prj(2), before=prj(1))
+        prj.roots.move(prj[2], before=prj[1])
         self.assertEqual(2, prj.roots[0].id)
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, len(prj.roots))
@@ -200,7 +202,7 @@ class TestWBS(TestCase):
         prj // Task(1, '1')
         prj // Task(2, '2')
 
-        prj.roots.move(prj(1), after=prj(2))
+        prj.roots.move(prj[1], after=prj[2])
         self.assertEqual(2, prj.roots[0].id)
         self.assertEqual(1, prj.roots[1].id)
         self.assertEqual(2, len(prj.roots))
@@ -210,8 +212,8 @@ class TestWBS(TestCase):
         prj // Task(1, '1')
         prj // Task(2, '2')
 
-        self.assertTrue(prj.remove(prj(2)))
-        self.assertEqual(1, len(prj))
+        self.assertTrue(prj.remove(prj[2]))
+        self.assertEqual(1, len(prj.tasks))
 
     def test_detached_2(self):
         with WBS() as prj0:
@@ -246,8 +248,8 @@ class TestWBS(TestCase):
         wbs.roots.append(t1)
 
         self.assertEqual(1, len(wbs.roots))
-        self.assertEqual(2, len(wbs))
-        self.assertEqual(1, wbs(2).parent.id)
+        self.assertEqual(2, len(wbs.tasks))
+        self.assertEqual(1, wbs[2].parent.id)
 
     def test_detached_7(self):
         t1 = WBS() // Task(1)
@@ -273,21 +275,21 @@ class TestWBS(TestCase):
                 t6 = t5 // Task(6, predecessors=[t3])
                 t5 // Task(7, predecessors=[t6])
 
-        subtree = wbs.subtree(wbs(id_in_=[2, 5]))
+        subtree = wbs.subtree(wbs.tasks(id_in_=[2, 5]))
 
-        self.assertEqual(6, len(subtree))
+        self.assertEqual(6, len(subtree.tasks))
 
-        self.assertEqual(subtree, subtree(2).wbs)
-        self.assertEqual(subtree, subtree(3).wbs)
-        self.assertEqual(subtree, subtree(4).wbs)
-        self.assertEqual(subtree, subtree(5).wbs)
-        self.assertEqual(subtree, subtree(6).wbs)
-        self.assertEqual(subtree, subtree(7).wbs)
+        self.assertEqual(subtree, subtree[2].wbs)
+        self.assertEqual(subtree, subtree[3].wbs)
+        self.assertEqual(subtree, subtree[4].wbs)
+        self.assertEqual(subtree, subtree[5].wbs)
+        self.assertEqual(subtree, subtree[6].wbs)
+        self.assertEqual(subtree, subtree[7].wbs)
 
-        self.assertEqual(subtree(3), subtree(6).predecessors[0])
-        self.assertEqual(subtree(6), subtree(7).predecessors[0])
+        self.assertEqual(subtree[3], subtree[6].predecessors[0])
+        self.assertEqual(subtree[6], subtree[7].predecessors[0])
 
-        self.assertEqual(subtree, subtree(6).predecessors[0].wbs)
-        self.assertEqual(subtree, subtree(7).predecessors[0].wbs)
+        self.assertEqual(subtree, subtree[6].predecessors[0].wbs)
+        self.assertEqual(subtree, subtree[7].predecessors[0].wbs)
 
 

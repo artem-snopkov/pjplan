@@ -4,7 +4,7 @@
 from pjplan.wbs import Task, WBS
 from pjplan.calendar import IWorkCalendar, WeeklyCalendar, DirectCalendar, FixedCalendar, DEFAULT_CALENDAR
 from pjplan.resource import IResource, Resource, DEFAULT_RESOURCE
-from pjplan.schedule import DefaultScheduler, Sprint
+from pjplan.schedule import DefaultScheduler
 from pjplan.io import TaskRaw
 from pjplan.io.csv_io import read_csv, write_csv
 from pjplan.viz.dhtmlx.gantt import DhtmlxGantt, DhtmlxGanttColumn
