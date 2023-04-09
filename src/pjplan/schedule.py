@@ -202,7 +202,7 @@ class DefaultScheduler(IScheduler):
                 if is_leaf:
                     _task.spent = 0
                 else:
-                    _task.spent = sum([min(ch.estimate, ch.spent) for ch in _task.children])
+                    _task.spent = sum([ch.spent for ch in _task.children])
 
             if _task.end is None:
                 if is_leaf:
@@ -221,7 +221,7 @@ class DefaultScheduler(IScheduler):
     def __prepare_tasks(project: WBS):
         for t in project.tasks:
             if len(t.children) > 0:
-                t.start = t.end = None
+                t.start = t.end = t.estimate = t.spent = None
 
     def calc(self, project: WBS) -> (WBS, ResourceUsage):
         res = project.clone()

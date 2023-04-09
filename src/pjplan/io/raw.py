@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Iterable
+from typing import List, Iterable, Any
 
 from pjplan import Task, WBS
 
@@ -7,7 +7,7 @@ from pjplan import Task, WBS
 class TaskRaw:
     def __init__(
             self,
-            id: int,
+            id: Any,
             name: str,
             resource: str = None,
             start: datetime = None,
@@ -39,7 +39,7 @@ class TaskRaw:
         return res
 
 
-def tasks_to_raws(tasks: Iterable) -> List[TaskRaw]:
+def tasks_to_raws(tasks: Iterable[Task]) -> List[TaskRaw]:
     raws = []
     for t in tasks:
         raw = TaskRaw(
@@ -54,13 +54,6 @@ def tasks_to_raws(tasks: Iterable) -> List[TaskRaw]:
             parent_id=t.parent.id if t.parent and t.parent.id != 0 else None,
             predecessor_ids=[p.id for p in t.predecessors]
         )
-        keys_to_gnore = {
-            '_Task__parent',
-            '_Task__children',
-            '_Task__predecessors',
-            '_Task__successors',
-            '_Task__wbs'
-        }
         for k in t.__dict__.keys():
             if not k.startswith('_') and k not in raw.__dict__:
                 raw.__setattr__(k, t.__getattribute__(k))

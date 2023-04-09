@@ -4,6 +4,254 @@ from unittest import TestCase
 from pjplan import Task, WBS
 
 
+class TaskCreateTestCase(TestCase):
+    """Test for creation of Task"""
+
+    # noinspection PyUnresolvedReferences
+    def test_create(self):
+        t = Task(
+            id='Some id',
+            name='task 1',
+            resource='res',
+            start=datetime(2023, 1, 1),
+            end=datetime(2024, 1, 1),
+            milestone=True,
+            estimate=8,
+            spent=4,
+            attr1="attr1",
+            attr2=[1],
+            attr3=10
+        )
+
+        self.assertEqual("Some id", t.id)
+        self.assertEqual("task 1", t.name)
+        self.assertEqual("res", t.resource)
+        self.assertEqual(datetime(2023, 1, 1), t.start)
+        self.assertEqual(datetime(2024, 1, 1), t.end)
+        self.assertEqual(True, t.milestone)
+        self.assertEqual(8, t.estimate)
+        self.assertEqual(4, t.spent)
+        self.assertEqual("attr1", t.attr1)
+        self.assertEqual([1], t.attr2)
+        self.assertEqual(10, t.attr3)
+
+    def test_create_parent(self):
+        t1 = Task(1)
+        t2 = Task(2, parent=t1)
+
+        self.assertEqual(t1, t2.parent)
+        self.assertEqual(t2, t1.children[0])
+
+    def test_create_children(self):
+        t1 = Task(1)
+        t2 = Task(2, children=[t1])
+
+        self.assertEqual(t1, t2.children[0])
+        self.assertEqual(t2, t1.parent)
+
+    def test_create_successors(self):
+        t1 = Task(1)
+        t2 = Task(2, successors=[t1])
+
+        self.assertEqual(t1, t2.successors[0])
+        self.assertEqual(t2, t1.predecessors[0])
+
+    def test_create_predecessors(self):
+        t1 = Task(1)
+        t2 = Task(2, predecessors=[t1])
+
+        self.assertEqual(t1, t2.predecessors[0])
+        self.assertEqual(t2, t1.successors[0])
+
+    def test_create_negative_estimate(self):
+        self.assertRaises(RuntimeError, lambda: Task(1, estimate=-1))
+
+    def test_create_negative_spent(self):
+        self.assertRaises(RuntimeError, lambda: Task(1, spent=-1))
+
+    def test_create_parent_cant_be_successor(self):
+        t1 = Task(1)
+        t2 = Task(2, parent=t1)
+        self.assertRaises(RuntimeError, lambda: Task(3, parent=t2, successors=[t1]))
+
+    def test_create_parent_cant_be_predecessor(self):
+        t1 = Task(1)
+        t2 = Task(2, parent=t1)
+        self.assertRaises(RuntimeError, lambda: Task(3, parent=t2, predecessors=[t1]))
+
+    def test_create_parent_cant_be_child(self):
+        t1 = Task(1)
+        t2 = Task(2, parent=t1)
+        self.assertRaises(RuntimeError, lambda: Task(3, parent=t2, children=[t1]))
+
+    def test_create_unique_id_in_subtree(self):
+        t1 = Task(1)
+        self.assertRaises(RuntimeError, lambda: Task(1, parent=t1))
+
+
+class TaskAttributesTestCase(TestCase):
+    """Test for task attributes getters/setters"""
+
+    def test_set_id(self):
+        t = Task(1)
+        try:
+            t.id = 2
+            self.fail("AttributeError expected")
+        except AttributeError:
+            pass
+
+    def test_set_estimate(self):
+        t = Task(1)
+
+        t.estimate = 8
+        self.assertEqual(8, t.estimate)
+
+        try:
+            t.estimate = -1
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
+
+    def test_set_spent(self):
+        t = Task(1)
+
+        t.spent=4
+        self.assertEqual(4, t.spent)
+
+        try:
+            t.spent = -1
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
+
+    def test_set_parent(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t2.parent = t1
+
+        self.assertEqual(t1, t2.parent)
+        self.assertEqual(t2, t1.children[0])
+
+    def test_set_parent_none(self):
+        t1 = Task(1)
+        t2 = Task(2, parent=t1)
+
+        t2.parent = None
+
+        self.assertIsNone(t2.parent)
+        self.assertEqual(0, len(t1.children))
+
+    def test_set_children(self):
+        t1 = Task(1)
+        t2 = Task(2)
+        t3 = Task(3)
+
+        t1.children += [t2, t3]
+
+        self.assertEqual(t1, t2.parent)
+        self.assertEqual(t1, t3.parent)
+        self.assertEqual(t2, t1.children[0])
+        self.assertEqual(t3, t1.children[1])
+
+    def test_set_children_none(self):
+        t1 = Task(1)
+
+        t1.children = None
+
+        self.assertEqual(0, len(t1.children))
+
+    def test_set_children_none_in_list(self):
+        t1 = Task(1)
+
+        t1.children = [None]
+
+        self.assertEqual(0, len(t1.children))
+
+    def test_set_children_append(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1.children.append(t2)
+
+        self.assertEqual(t1, t2.parent)
+        self.assertEqual(t2, t1.children[0])
+
+    def test_set_children_floordiv(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1 // t2
+
+        self.assertEqual(t1, t2.parent)
+        self.assertEqual(t2, t1.children[0])
+
+    def test_set_children_not_unique_id(self):
+        t1 = Task(1)
+        t2 = Task(2)
+        t2_ = Task(2)
+
+        try:
+            t1.children += [t2, t2_]
+            self.fail("RuntimeError expected")
+        except RuntimeError:
+            pass
+
+    def test_set_successors(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1.successors = [t2]
+
+        self.assertEqual(t2, t1.successors[0])
+        self.assertEqual(t1, t2.predecessors[0])
+
+    def test_set_successors_append(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1.successors.append(t2)
+
+        self.assertEqual(t2, t1.successors[0])
+        self.assertEqual(t1, t2.predecessors[0])
+
+    def test_set_successors_rshift(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1 >> t2
+
+        self.assertEqual(t2, t1.successors[0])
+        self.assertEqual(t1, t2.predecessors[0])
+
+    def test_set_predecessors(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1.predecessors = [t2]
+
+        self.assertEqual(t2, t1.predecessors[0])
+        self.assertEqual(t1, t2.successors[0])
+
+    def test_set_predecessors_append(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1.predecessors.append(t2)
+
+        self.assertEqual(t2, t1.predecessors[0])
+        self.assertEqual(t1, t2.successors[0])
+
+    def test_set_predecessors_lshift(self):
+        t1 = Task(1)
+        t2 = Task(2)
+
+        t1 << t2
+
+        self.assertEqual(t2, t1.predecessors[0])
+        self.assertEqual(t1, t2.successors[0])
+
+
 class TestTask(TestCase):
 
     def test_clone(self):

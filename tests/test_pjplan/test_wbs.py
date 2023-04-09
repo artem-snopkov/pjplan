@@ -1,7 +1,7 @@
 from datetime import datetime
 from unittest import TestCase
 
-from pjplan import WBS, Task
+from pjplan import WBS, Task, DefaultScheduler
 
 
 class TestWBS(TestCase):
@@ -293,3 +293,60 @@ class TestWBS(TestCase):
         self.assertEqual(subtree, subtree[7].predecessors[0].wbs)
 
 
+class CriticalPathTestCase(TestCase):
+
+    def test_1(self):
+        with WBS() as wbs:
+            wbs // Task(1, estimate=8)
+            wbs // Task(2, estimate=8)
+
+        path = wbs.critical_path()
+        self.assertTrue(wbs[1] in path)
+        self.assertTrue(wbs[2] in path)
+
+    def test_2(self):
+        with WBS() as wbs:
+            wbs // Task(1, estimate=8)
+            wbs // Task(2, estimate=16)
+
+        path = wbs.critical_path()
+
+        for p in path:
+            print(p.id)
+
+        self.assertTrue(wbs[1] not in path)
+        self.assertTrue(wbs[2] in path)
+
+    def test_3(self):
+        with WBS() as wbs:
+            wbs // Task(1, estimate=8)
+            wbs // Task(2, estimate=16, predecessors=[wbs[1]])
+
+        path = wbs.critical_path()
+        self.assertTrue(wbs[1] in path)
+        self.assertTrue(wbs[2] in path)
+
+    def test_4(self):
+        with WBS() as wbs:
+            wbs // Task(1, estimate=8)
+            wbs // Task(2, estimate=16)
+            wbs // Task(3, estimate=16, predecessors=[wbs[1]])
+
+        path = wbs.critical_path()
+        self.assertTrue(wbs[2] not in path)
+        self.assertTrue(wbs[1] in path)
+        self.assertTrue(wbs[3] in path)
+
+    def test_5(self):
+        with WBS() as wbs:
+            wbs // Task(1, estimate=8)
+            wbs // Task(2, estimate=8)
+            wbs // Task(3, estimate=8, predecessors=[wbs[1]])
+
+        plan, usage = DefaultScheduler().calc(wbs)
+
+        path = plan.critical_path()
+
+        self.assertTrue(plan[2] not in path)
+        self.assertTrue(plan[1] in path)
+        self.assertTrue(plan[3] in path)

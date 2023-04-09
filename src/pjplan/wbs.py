@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Optional, Union, Iterable, Callable, Any
 
-from pjplan.utils import GREEN, GREY, RED, PINK, YELLOW, TEAL, BLUE, colored, TextTable
+from pjplan.alg.critical_path import CriticalPathCalculator
+from pjplan.utils import GREY, RED, PINK, YELLOW, TEAL, BLUE, TextTable
 
 _ROOT_ID = sys.maxsize
 
@@ -14,10 +15,8 @@ def _to_list(val: Union['Task', Iterable['Task']]) -> List['Task']:
         return []
     elif type(val) is Task:
         return [val]
-    elif type(val) is list or type(val) is tuple or type(val) is set:
-        return [t for t in val]
-    elif isinstance(val, Iterable):
-        return [t for t in val]
+    elif type(val) is list or type(val) is tuple or type(val) is set or isinstance(val, Iterable):
+        return [t for t in val if t is not None]
     else:
         raise RuntimeError("Unsupported type", type(val))
 
@@ -26,6 +25,24 @@ def _find_root(task: 'Task'):
     if task.parent is not None:
         return _find_root(task.parent)
     return task
+
+
+def _find_clusters(tasks: List['Task']) -> List[List['Task']]:
+    task_ids = set((t.id for t in tasks))
+    visited = set()
+    clusters = []
+
+    for t in tasks:
+        if t.id in visited:
+            continue
+
+        all_deps = t.all_successors(id_in_=task_ids) + t.all_predecessors(id_in_=task_ids) + [t]
+        for d in all_deps:
+            visited.add(d.id)
+
+        clusters.append(all_deps)
+
+    return clusters
 
 
 def _collect_subtree(task: 'Task') -> List['Task']:
@@ -62,6 +79,17 @@ def _check_no_nones_in_list(lst: List, name: str):
     for v in lst:
         if v is None:
             raise RuntimeError(f"{name} contains None value")
+
+
+def _unique_tasks(tasks):
+    m = set()
+    res = []
+    for t in tasks:
+        if t.id not in m:
+            m.add(t.id)
+            res.append(t)
+
+    return res
 
 
 class _Repr:
@@ -258,6 +286,19 @@ class _ImmutableTaskList:
 
         return _ImmutableTaskList([t for t in self if search(t, **kwargs)])
 
+    def order_by(self, key: Union[str, List[str]], reverse=False) -> '_ImmutableTaskList':
+
+        if type(key) is str:
+            return _ImmutableTaskList(sorted(self._list, key=lambda x: x.__getattribute__(key), reverse=reverse))
+        elif type(key) is list or type(key) is tuple or type(key) is set:
+            return _ImmutableTaskList(
+                sorted(self._list,
+                       key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
+                       reverse=reverse)
+            )
+        else:
+            raise RuntimeError(f"Unsupported key type {type(key)}")
+
     def __iter__(self):
         return iter(self._list)
 
@@ -409,7 +450,8 @@ class _ChildrenList(_TaskList):
         if len(self) > 0:
             self.move(task, before=self[index])
 
-    def move(self, tasks: Union['Task', Iterable['Task']], before: Optional['Task'] = None, after: Optional['Task'] = None) -> None:
+    def move(self, tasks: Union['Task', Iterable['Task']], before: Optional['Task'] = None,
+             after: Optional['Task'] = None) -> None:
         """
         Move task before or after another task
         :param tasks: task or tasks to move
@@ -446,15 +488,12 @@ class _ChildrenList(_TaskList):
         :param key: attribute name or list of attribute names
         :param reverse: reverse sort
         """
-        if self.__setter is None:
-            raise RuntimeError("Unsupported operation")
-
         if type(key) is str:
             self._list = sorted(self._list, key=lambda x: x.__getattribute__(key), reverse=reverse)
         elif type(key) is list or type(key) is tuple or type(key) is set:
             self._list = sorted(self._list,
-                                 key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
-                                 reverse=reverse)
+                                key=lambda x: '-'.join([str(x.__getattribute__(k)) for k in key]),
+                                reverse=reverse)
         else:
             raise RuntimeError(f"Unsupported key type {type(key)}")
 
@@ -550,7 +589,7 @@ class Task:
 
     def __init__(
             self,
-            id: int,
+            id: Any,
             name: str = None,
             resource: str = None,
             start: datetime = None,
@@ -583,8 +622,8 @@ class Task:
         self.start = start
         self.end = end
         self.milestone = milestone
-        self.estimate = estimate
-        self.spent = spent
+        self.__estimate = None
+        self.__spent = None
 
         self.__wbs: Optional['WBS'] = None
 
@@ -592,6 +631,9 @@ class Task:
         self.__children = []
         self.__predecessors = []
         self.__successors = []
+
+        self.estimate = estimate
+        self.spent = spent
 
         if parent is not None:
             self.parent = parent
@@ -613,8 +655,28 @@ class Task:
             ch._attach(wbs)
 
     @property
-    def id(self):
+    def id(self) -> Union[int, str]:
         return self.__id
+
+    @property
+    def estimate(self) -> float:
+        return self.__estimate
+
+    @estimate.setter
+    def estimate(self, value: float):
+        if value is not None and value < 0:
+            raise RuntimeError("Estimate < 0")
+        self.__estimate = value
+
+    @property
+    def spent(self) -> float:
+        return self.__spent
+
+    @spent.setter
+    def spent(self, value: float):
+        if value is not None and value < 0:
+            raise RuntimeError("Spent < 0")
+        self.__spent = value
 
     @property
     def parent(self) -> Optional['Task']:
@@ -624,7 +686,7 @@ class Task:
         return self.__parent
 
     @property
-    def wbs(self):
+    def wbs(self) -> 'WBS':
         """WBS that task attached to or None, if task detached"""
         return self.__wbs
 
@@ -778,8 +840,8 @@ class Task:
             for pr in t.predecessors:
                 yield pr
                 yield from get_predecessor(pr)
-
-        return [t for t in get_predecessor(self)]
+        # TODO поиск предшественников не оптимальный, много дублей, надо оптимизировать
+        return _unique_tasks(get_predecessor(self))
 
     @property
     def successors(self) -> _SuccessorsList:
@@ -825,9 +887,10 @@ class Task:
                 yield pr
                 yield from get_successor(pr)
 
-        return [t for t in get_successor(self)]
+        # TODO поиск последователей не оптимальный, много дублей, надо оптимизировать
+        return _unique_tasks(get_successor(self))
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         d = {
             'id': self.id
         }
@@ -839,7 +902,7 @@ class Task:
 
     def clone(self, **kwargs) -> 'Task':
         """Creates copy of this task without parent/children/successors/predecessors"""
-        cloned = Task(id=self.id)
+        cloned = Task(id=self.id, estimate=self.estimate, spent=self.spent)
 
         for k in self.__dict__.keys():
             if not k.startswith('_'):
@@ -865,7 +928,7 @@ class Task:
         self.successors += other
         return other
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.to_dict())
 
     def __enter__(self):
@@ -874,7 +937,7 @@ class Task:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return _Repr.repr([self])
 
     def print(self, fields: Iterable[str] = None, children=True, theme=None):
@@ -913,7 +976,7 @@ class WBS:
         return self.__root
 
     @property
-    def roots(self):
+    def roots(self) -> _ChildrenList:
         """List of all root tasks in WBS"""
         return self.__root.children
 
@@ -922,12 +985,12 @@ class WBS:
         self.__root.children = value
 
     @property
-    def tasks(self):
+    def tasks(self) -> _ImmutableTaskList:
         """List of all tasks in WBS"""
         return self.__root.all_children
 
     @property
-    def start(self):
+    def start(self) -> Optional[datetime]:
         """Returns min start date from all tasks in WBS"""
         starts = [t.start for t in self.roots if t.start is not None]
         if len(starts):
@@ -935,7 +998,7 @@ class WBS:
         return None
 
     @property
-    def end(self):
+    def end(self) -> Optional[datetime]:
         """Returns max end date from all tasks in WBS"""
         ends = [t.end for t in self.__root.children if t.end is not None]
         if len(ends):
@@ -982,11 +1045,11 @@ class WBS:
 
         return tasks_to_delete
 
-    def __getitem__(self, item):
+    def __getitem__(self, task_id: Any):
         try:
-            return next((t for t in self.__root.all_children if t.id == item))
+            return next((t for t in self.__root.all_children if t.id == task_id))
         except StopIteration:
-            raise RuntimeError(f"Task with id={item} not found")
+            raise RuntimeError(f"Task with id={task_id} not found")
 
     def __floordiv__(self, other: Union['Task', Iterable['Task']]):
         return self.__root // other
@@ -1047,7 +1110,53 @@ class WBS:
         """
         return self.__clone(_to_list(roots))
 
-    def __repr__(self):
+    def __init_critical_path_calculator(self, calculator: CriticalPathCalculator, task: Task):
+        if len(task.children) > 0 or calculator.has_work(task.id):
+            return
+
+        p_ids = []
+        for p in task.predecessors:
+            p_ids.append(p.id)
+            self.__init_critical_path_calculator(calculator, p)
+
+        estimate = task.estimate if task.estimate is not None else 0
+        spent = task.spent if task.spent is not None else 0
+
+        calculator.add_work(task.id, max(estimate - spent, 0), p_ids)
+
+    def critical_path(self) -> Iterable[Task]:
+        calculator = CriticalPathCalculator()
+
+        wbs_end = self.end
+        if wbs_end is not None:
+            tasks = self.tasks(end=wbs_end)
+        else:
+            tasks = self.tasks()
+
+        for t in tasks:
+            self.__init_critical_path_calculator(calculator, t)
+
+        critical_task_ids = calculator.calc()
+
+        tasks_map = {t.id: t for t in self.tasks}
+        critical_tasks = [tasks_map[tid] for tid in critical_task_ids]
+
+        if wbs_end is None:
+            return _ImmutableTaskList(critical_tasks)
+        else:
+            critical_tasks_clusters = _find_clusters(critical_tasks)
+
+            res = []
+            for cluster in critical_tasks_clusters:
+                for t in cluster:
+                    if t.end == wbs_end:
+                        res += cluster
+                        break
+
+            r = _ImmutableTaskList(res).order_by('start')
+            return r
+
+    def __repr__(self) -> str:
         return _Repr.repr(self.roots)
 
     def print(self, fields: Iterable[str] = None, children=True, theme=None):
