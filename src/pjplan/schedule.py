@@ -82,11 +82,17 @@ class ResourceUsage:
         return table.text_repr(True)
 
 
+class Schedule:
+    def __init__(self, wbs: WBS, resource_usage: ResourceUsage):
+        self.wbs = wbs
+        self.resource_usage = resource_usage
+
+
 class IScheduler(ABC):
     """Планировщик проектов. Строит расписание проекта"""
 
     @abstractmethod
-    def calc(self, wbs: WBS) -> (WBS, ResourceUsage):
+    def calc(self, wbs: WBS) -> Schedule:
         """
         Строит расписание проекта
         :param wbs: структура работ
@@ -223,7 +229,7 @@ class DefaultScheduler(IScheduler):
             if len(t.children) > 0:
                 t.start = t.end = t.estimate = t.spent = None
 
-    def calc(self, project: WBS) -> (WBS, ResourceUsage):
+    def calc(self, project: WBS) -> Schedule:
         res = project.clone()
 
         self.__validate_graph_isolation(res)
@@ -233,7 +239,8 @@ class DefaultScheduler(IScheduler):
         calculated = []
         for t in res.roots:
             self.__calc_task_dates(t, self.__start, resource_usage, calculated)
-        return res, resource_usage
+
+        return Schedule(res, resource_usage)
 
     @staticmethod
     def __validate_graph_isolation(project: WBS):
