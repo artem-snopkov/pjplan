@@ -63,7 +63,8 @@ from pjplan import MermaidGantt
 
 MermaidGantt(schedule.schedule)
 ```
-![Иллюстрация к проекту](https://github.com/artem-snopkov/pjplan/raw/master/docs/_static/img/readme/mermaid.png)
+![Mermaid diagram](https://raw.githubusercontent.com/artem-snopkov/pjplan/main/docs/_static/img/readme/mermaid.png)
+
 ## More examples
 
 More examples you can find at [examples](/examples) directory.
