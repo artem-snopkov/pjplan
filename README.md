@@ -2,19 +2,32 @@
 
 ## What is it?
 
-**pjplan** turns your Jupyter Notebook into project management software. 
-This Python package gives you a simple API with following possibilities:
-- Describe Work Burndown Structure (WBS) of your project
+**pjplan** turns your [Jupyter Notebook](https://jupyter.org/) into project management software. 
+This Python package gives you a simple API with following features:
+- Describe Work Burn-down Structure (WBS) of your project in code or load it from external source.
+- Manipulate tasks: link them as successors/predecessors, find, delete, reorder, etc. A lot of batch operations are supported via simple commands.
 - Assign resources and estimates to tasks
-- Link tasks each other as successors/predecessors
 - Define work calendars for each resource
 - Calculate project schedule in several ways
-- Calculate critical path
-- Visualize schedule as Gantt diagramm
-- Save/Load your projects to csv files
+- Find critical path
+- Visualize WBS as Gantt or Network diagram
+- Save/Load your WBS to/from csv files
+- Export WBS to [pandas](https://pandas.pydata.org/)
 
-**pjplan** created specially for use inside Jupyter Notebook or similar software, 
-but of course in can be used in any other python applications.
+## Why to use it?
+There are several use cases for pjplan:
+- Work with project plan as code with your favourite IDE, VSC, etc.
+- Load tasks data from your tracker (Jira, Asure Devops, Trello, etc.) to pjplan, 
+link/modify/reorder/delete tasks using rich pjplan API, then create schedule and Gantt for them.
+- Create several schedules for same project and find optimal one.
+
+## Where to use it?
+
+**pjplan** created specially for use inside [Jupyter Notebook](https://jupyter.org/) 
+or similar software. All library objects (WBS, Task, Schedule, Calendar) have great visualisations 
+so you can easily work with them in notebooks. 
+
+But, of course, you can use pjplan in any other python applications.
 
 ## Installation
 
@@ -46,7 +59,7 @@ developer = Resource(name='Developer', calendar=work_calendar)
 tester = Resource(name='Tester', calendar=work_calendar)
 ```
 
-Now we can create schedule for out project:
+Now we can create schedule for our project:
 ```python
 from datetime import datetime
 from pjplan import ForwardScheduler
@@ -57,14 +70,29 @@ schedule = ForwardScheduler(
 ).calc(prj)
 ```
 
-and visualise it as Mermaid Gantt:
+visualise it as [Mermaid](https://mermaid.js.org/) Gantt:
 ```python
 from pjplan import MermaidGantt
 
 MermaidGantt(schedule.schedule)
 ```
-![Mermaid diagram](https://raw.githubusercontent.com/artem-snopkov/pjplan/main/docs/_static/img/readme/mermaid.png)
+![Mermaid Gantt](https://raw.githubusercontent.com/artem-snopkov/pjplan/main/docs/_static/img/readme/mermaid_gantt.png)
+
+or Network:
+```python
+from pjplan import MermaidNetwork
+
+MermaidNetwork(schedule.schedule)
+```
+![Mermaid Network](https://raw.githubusercontent.com/artem-snopkov/pjplan/main/docs/_static/img/readme/mermaid_network.png)
+
+save schedule to csv:
+```python
+from pjplan import write_csv
+
+write_csv(schedule.schedule, "schedule.csv")
+```
 
 ## More examples
 
-More examples you can find at [examples](/examples) directory.
+More examples you can find at [examples](https://github.com/artem-snopkov/pjplan/tree/main/examples) directory.
