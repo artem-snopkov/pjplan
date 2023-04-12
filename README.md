@@ -66,6 +66,7 @@ MermaidGantt(schedule.schedule)
 ```mermaid
 gantt
   dateFormat DD.MM.YYYY HH:mm
+  todayMarker off
     Task 1: active, id_1, 12.04.2023 00:00, 19.04.2023 00:00
     Task 2:  id_2, 19.04.2023 00:00, 21.04.2023 12:00
     Task 3:  id_3, 21.04.2023 00:00, 17.05.2023 18:00
