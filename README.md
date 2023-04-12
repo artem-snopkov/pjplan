@@ -63,17 +63,7 @@ from pjplan import MermaidGantt
 
 MermaidGantt(schedule.schedule)
 ```
-```mermaid
-gantt
-  dateFormat DD.MM.YYYY HH:mm
-  todayMarker off
-    Task 1: active, id_1, 12.04.2023 00:00, 19.04.2023 00:00
-    Task 2:  id_2, 19.04.2023 00:00, 21.04.2023 12:00
-    Task 3:  id_3, 21.04.2023 00:00, 17.05.2023 18:00
-    Task 4:  id_4, 21.04.2023 00:00, 09.05.2023 12:00
-    Task 5:  id_5, 09.05.2023 12:00, 17.05.2023 18:00
-```
-
+![Иллюстрация к проекту](https://github.com/artem-snopkov/pjplan/raw/master/docs/_static/img/readme/mermaid.png)
 ## More examples
 
 More examples you can find at [examples](/examples) directory.
