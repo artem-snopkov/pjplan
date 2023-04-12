@@ -1,4 +1,4 @@
-# pjplan: Python library for project schedule and analysis
+# pjplan: Python library for project planning and analysis
 
 ## What is it?
 
