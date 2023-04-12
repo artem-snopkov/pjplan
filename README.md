@@ -73,3 +73,7 @@ gantt
     Task 4:  id_4, 21.04.2023 00:00, 09.05.2023 12:00
     Task 5:  id_5, 09.05.2023 12:00, 17.05.2023 18:00
 ```
+
+## More examples
+
+More examples you can find at [examples](/examples) directory.
