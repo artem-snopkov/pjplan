@@ -5,7 +5,7 @@ import pjplan as pl
 from pjplan import Task, WBS
 
 
-class TestDefaultScheduler(TestCase):
+class TestForwardScheduler(TestCase):
 
     def test_calc_1(self):
         p = WBS()
@@ -13,7 +13,7 @@ class TestDefaultScheduler(TestCase):
             with first // Task(2, "2", start=datetime.now(), end=datetime(2022, 11, 1)) as second:
                 second // Task(3, "3", start=datetime(2022, 11, 1), end=datetime(2022, 12, 1), resource='Test')
 
-        s = pl.DefaultScheduler(start=datetime(2022, 1, 1)).calc(p).wbs
+        s = pl.ForwardScheduler(start=datetime(2022, 1, 1)).calc(p).schedule
 
         self.assertEqual(p[3].start, s[2].start)
         self.assertEqual(p[3].start, s[1].start)
@@ -29,7 +29,7 @@ class TestDefaultScheduler(TestCase):
         p // Task(1, estimate=10, resource='default')
         p // Task(2, estimate=16, resource='default')
 
-        s = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p).wbs
+        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
 
         self.assertEqual(datetime(2025, 1, 1), s[1].start)
         self.assertEqual(datetime(2025, 1, 2, 6), s[1].end)
@@ -45,7 +45,7 @@ class TestDefaultScheduler(TestCase):
         p // Task(1, estimate=8, resource='default')
         p // Task(2, start=datetime(2025, 1, 1), estimate=8, resource='default')
 
-        s = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p).wbs
+        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
 
         self.assertEqual(datetime(2025, 1, 1), s[1].start)
         self.assertEqual(datetime(2025, 1, 2), s[1].end)
@@ -57,11 +57,12 @@ class TestDefaultScheduler(TestCase):
         p // Task(1, estimate=8, resource='default')
         p[1] >> p // Task(2, 'ms', milestone=True)
 
-        s = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p).wbs
+        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
 
         self.assertEqual(datetime(2025, 1, 2), s[1].end)
         self.assertEqual(datetime(2025, 1, 2), s[2].start)
 
+    # noinspection PyStatementEffect
     def test_calc_5(self):
         p = WBS()
         p // Task(1, estimate=8, resource='default')
@@ -69,7 +70,7 @@ class TestDefaultScheduler(TestCase):
 
         p[2] >> p[1]
 
-        s = pl.DefaultScheduler(start=datetime(2025, 1, 1)).calc(p).wbs
+        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
 
         self.assertEqual(datetime(2025, 1, 1), s[2].start)
         self.assertEqual(datetime(2025, 1, 2), s[1].start)

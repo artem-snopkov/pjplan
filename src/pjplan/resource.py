@@ -17,22 +17,27 @@ class IResource(ABC):
     def get_available_units(self, date: datetime) -> float:
         pass
 
-    def get_nearest_availability_date(self, start_date: datetime, max_days=100) -> datetime:
+    def get_nearest_availability_date(self, start_date: datetime, direction: int, max_days=100) -> datetime:
         """
         Возвращает ближайшую дату доступности ресурса, начиная со start_date
+        :param direction: 1 или -1
         :param start_date: дата начала поиска
         :param max_days: максимальный интервал поиска (в днях)
         :return: дата доступности
         """
         step = 0
         while step < max_days:
-            if self.get_available_units(start_date) > 0:
-                return start_date
-            start_date += timedelta(days=1)
+            if direction < 0:
+                if self.get_available_units(start_date - timedelta(days=1)) > 0:
+                    return start_date
+            else:
+                if self.get_available_units(start_date) > 0:
+                    return start_date
+            start_date += timedelta(days=direction)
             step += 1
 
         raise RuntimeError(
-            "Can't find nearest availability time for resource", self.resource,
+            "Can't find nearest availability time for resource", self.name,
             "after", start_date.strftime('%Y-%m-%d')
         )
 
@@ -47,7 +52,6 @@ class Resource(IResource):
         """
         :param name: уникальное наименование ресурса
         :param calendar: рабочий календарь
-        :param availability: процент доступности ресурса. Задается интервалами.
 
         Пример интервалов доступности:
         availability = [(datetime(2000, 1, 1), 50), (datetime(2000, 2, 1), 100)]
@@ -67,6 +71,14 @@ class Resource(IResource):
         """
 
         return self.calendar.get_available_units(date)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        res = f'{self.name}\n'
+        res += self.calendar.__repr__()
+        return res
 
 
 DEFAULT_RESOURCE = Resource("default")

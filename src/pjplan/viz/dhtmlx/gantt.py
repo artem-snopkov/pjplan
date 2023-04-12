@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from string import Template
-from typing import Dict, Tuple
+from typing import Tuple
 
 from pjplan import WBS
 
@@ -90,18 +90,18 @@ class DhtmlxGantt:
                 task_classes[tid] = css_class_name
 
             bar_css = '{'
-            for k, v in style_dict.items():
+            for k, s in style_dict.items():
                 if k == 'progress':
                     continue
-                bar_css += f'{k}:{v}!important;'
+                bar_css += f'{k}:{s}!important;'
             bar_css += '}\n'
 
             res += '.' + css_class_name + bar_css
 
             if 'progress' in style_dict:
                 progress_css = '{'
-                for k, v in style_dict['progress'].items():
-                    progress_css += f'{k}:{v}!important;'
+                for k, s in style_dict['progress'].items():
+                    progress_css += f'{k}:{s}!important;'
                 progress_css += '}\n'
 
                 res += '.' + css_class_name + ' .gantt_task_progress' + progress_css

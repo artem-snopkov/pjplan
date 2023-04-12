@@ -1,8 +1,8 @@
 import csv
 from datetime import datetime
-from typing import List, Optional, Iterable
+from typing import List, Optional
 
-from pjplan import Task, WBS
+from pjplan import WBS
 from pjplan.io.raw import TaskRaw, raws_to_wbs, tasks_to_raws
 
 __DATE_FORMAT = '%d.%m.%y'
@@ -94,7 +94,7 @@ def write_csv(wbs: WBS, path: str, encoding='utf-8', delimiter=';'):
         csvwriter = csv.writer(output_file, delimiter=delimiter)
         fields = {}
         for t in raws:
-            for k,v in t.__dict__.items():
+            for k, v in t.__dict__.items():
                 if k not in __DEFAULT_FIELDS:
                     fields[k] = type(v).__name__
         field_list = [f"{k}" for k in fields.keys()]

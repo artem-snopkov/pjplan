@@ -26,7 +26,7 @@ def page(project: WBS):
         unsafe_allow_html=True,
     )
 
-    project(resource='Tester').gantt_bar_style = {
+    project.tasks(resource='Tester').gantt_bar_style = {
         'background': '#23964d'
     }
 
@@ -47,7 +47,6 @@ def page(project: WBS):
 
 
 if __name__ == '__main__':
-
     with WBS() as prj:
         prj // Task(2, 'Задача 1', estimate=40, spent=20, resource='Tester')
         prj // Task(3, 'Задача 2', predecessors=[prj[2]], estimate=20, resource='Tester')

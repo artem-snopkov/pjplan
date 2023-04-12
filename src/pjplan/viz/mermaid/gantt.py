@@ -64,13 +64,13 @@ class MermaidGantt:
             t.name.replace(':', ''),
             self.__mermaid_task_state(t),
             'id_' + str(t.id),
-            t.start.strftime('%d.%m.%Y'),
-            t.end.strftime('%d.%m.%Y')
+            t.start.strftime('%d.%m.%Y %H:%M'),
+            t.end.strftime('%d.%m.%Y %H:%M')
         )
 
     def __src(self):
         res = "gantt\n"
-        res += "  dateFormat DD.MM.YYYY\n"
+        res += "  dateFormat DD.MM.YYYY HH:mm\n"
         if self.title is not None:
             res += "  title {}\n".format(self.title)
         if self.weekends:

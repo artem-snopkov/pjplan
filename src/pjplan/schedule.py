@@ -1,75 +1,111 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Dict, Union, Set
+from typing import List, Set
 
-from pjplan import Task, WBS, IResource, DEFAULT_RESOURCE
-from pjplan.utils import TextTable, GREEN, BLUE, YELLOW, GREY, RED
+from pjplan import Task, WBS, IResource, Resource
+from pjplan.utils import TextTable, GREEN, YELLOW, GREY, RED
+
+
+def _validate_graph_isolation(project: WBS):
+    all_tasks = {task.id: task for task in project.tasks}
+
+    for t in all_tasks.values():
+        for pr in t.predecessors:
+            if pr.id not in all_tasks and (not pr.start or not pr.end):
+                raise RuntimeError(
+                    "Task {t.id} ({t.name}) has predecessor {pr.id} ({pr.name}) w/o dates and outside wbs"
+                )
+
+
+def _check_loops(project: WBS):
+    validated = set()
+    for t in project.tasks:
+        _check_loops_from_task(t, set(), validated)
+
+
+def _check_loops_from_task(task: Task, visited_tasks: Set[int], validated: Set[int]):
+    if task.id in validated:
+        return
+
+    if task.id in visited_tasks:
+        raise RuntimeError(
+            "Found circle",
+            [str(t) + "-->" for t in visited_tasks] + [str(task.id) + ":" + task.name]
+        )
+
+    visited_tasks.add(task.id)
+
+    for s in task.predecessors:
+        _check_loops_from_task(s, visited_tasks, validated)
+
+    visited_tasks.remove(task.id)
+    validated.add(task.id)
+
+
+@dataclass(frozen=True)
+class ResourceUsageRow:
+    """Row at resource usage report"""
+    resource: IResource
+    """Resource"""
+    date: datetime
+    """Date"""
+    task: Task
+    """Task"""
+    units: float
+    """Units of resource reserved for this resource, task and date"""
 
 
 class ResourceUsage:
-    """Отчет об использовании ресурсов"""
+    """Resource usage report"""
 
     def __init__(self):
-        self.__usage: Dict[IResource, Dict[datetime, float]] = {}
+        self.__items: List[ResourceUsageRow] = []
 
     @staticmethod
     def __get_key(date: datetime):
         return datetime(date.year, date.month, date.day, 0, 0, 0, 0)
 
-    def reserve(self, resource: IResource, date: datetime, amount: float) -> float:
-        resource_usage_dict = self.__usage.setdefault(resource, {})
-        key = self.__get_key(date)
-        resource_usage_dict[key] = resource_usage_dict.setdefault(key, 0) + amount
-        return amount
+    def reserve(self, resource: IResource, date: datetime, task: Task, units: float) -> float:
+        self.__items.append(ResourceUsageRow(resource, self.__get_key(date), task, units))
+        return units
 
-    def usage(self, resource: IResource, date: datetime = None) -> Union[float, Dict[datetime, float]]:
-        resource_usage_dict = self.__usage.setdefault(resource, {})
-        if not date:
-            return resource_usage_dict
-        return resource_usage_dict.setdefault(self.__get_key(date), 0)
+    def reserved(self, resource: IResource, date: datetime, task: Task = None) -> float:
+        if task is None:
+            rows = [item.units for item in self.__items if
+                    item.resource == resource and item.date == self.__get_key(date)]
+        else:
+            rows = [item.units for item in self.__items if
+                    item.resource == resource and item.date == self.__get_key(date) and item.task == task]
+        if len(rows) == 0:
+            return 0
+        return sum(rows)
 
-    def rows(self):
-        dates = []
-        for v in self.__usage.values():
-            dates += v.keys()
-
-        min_date = min(dates)
-        max_date = max(dates)
-
-        res = []
-        d = min_date
-        while d < max_date:
-            row = {
-                'date': d
-            }
-            res.append(row)
-
-            for k in self.__usage.keys():
-                row[k.name] = self.usage(k, d)
-            d += timedelta(days=1)
-
-        return res
+    def rows(self) -> List[ResourceUsageRow]:
+        return self.__items
 
     def __repr__(self):
-        dates = []
-        for v in self.__usage.values():
-            dates += v.keys()
+        if len(self.__items) == 0:
+            return "Empty"
 
+        dates = [item.date for item in self.__items]
         min_date = min(dates)
         max_date = max(dates)
+
+        resources = set([item.resource for item in self.__items])
 
         table = TextTable()
         table.new_row()
         table.new_cell('DATE', RED)
-        for k in self.__usage.keys():
+        for k in resources:
             table.new_cell(k.name.upper(), RED)
 
         d = min_date
-        while d < max_date:
+        while d <= max_date:
             table.new_row()
             table.new_cell(d.strftime('%y-%m-%d'))
-            for k in self.__usage.keys():
-                val = self.usage(k, d)
+            for k in resources:
+                val = self.reserved(k, d)
                 if val == 0:
                     color = GREY
                 elif val == k.get_available_units(d):
@@ -82,46 +118,58 @@ class ResourceUsage:
         return table.text_repr(True)
 
 
+@dataclass(frozen=True)
 class Schedule:
-    def __init__(self, wbs: WBS, resource_usage: ResourceUsage):
-        self.wbs = wbs
-        self.resource_usage = resource_usage
+    """WBS schedule result"""
+    schedule: WBS
+    """Clone of original WBS with calculated start and end dates on each task"""
+    resource_usage: ResourceUsage
+    """Resource usage report"""
 
 
 class IScheduler(ABC):
-    """Планировщик проектов. Строит расписание проекта"""
+    """WBS schedule calculator"""
 
     @abstractmethod
     def calc(self, wbs: WBS) -> Schedule:
         """
-        Строит расписание проекта
-        :param wbs: структура работ
-        :return: Tuple (<копия wbs с установленными start и end у всех Task>, <Отчет об использовании ресурсов>)
+        Calculate WBS schedule
+        :param wbs: Work burndown structure
+        :return: WBS schedule
         """
         pass
 
 
-class DefaultScheduler(IScheduler):
+class ForwardScheduler(IScheduler):
+    """Forward WBS scheduler"""
+
     def __init__(
             self,
             start: datetime = None,
             resources: List[IResource] = None,
+            balance_resources: bool = True,
             default_estimate: int = 0
     ):
         self.__start = start if start is not None else datetime.now()
         self.__resources = {} if resources is None else {r.name: r for r in resources}
+        self.__balance_resources = balance_resources
         self.__default_estimate = default_estimate
 
-    @staticmethod
     def __get_resource_nearest_available_date(
+            self,
             resource: IResource,
             resource_usage: ResourceUsage,
-            start_date: datetime
+            start_date: datetime,
+            task: Task,
+            max_steps: int = 1000
     ) -> datetime:
-        d = resource.get_nearest_availability_date(start_date)
+        d = resource.get_nearest_availability_date(start_date, 1)
 
-        for i in range(0, 1000):
-            available = resource.get_available_units(d) - resource_usage.usage(resource, d)
+        for i in range(0, max_steps):
+            reserved = resource_usage.reserved(resource, d) if self.__balance_resources \
+                else resource_usage.reserved(resource, d, task)
+
+            available = resource.get_available_units(d) - reserved
             if available > 0:
                 percent = 1 - available / resource.get_available_units(d)
                 d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) + timedelta(hours=24 * percent)
@@ -133,35 +181,39 @@ class DefaultScheduler(IScheduler):
             "after", start_date.strftime('%Y-%m-%d')
         )
 
-    @staticmethod
     def __shift_by_resource_usage_and_calendar(
+            self,
             resource: IResource,
             resource_usage: ResourceUsage,
             start_date: datetime,
-            left_hours: float
+            task: Task,
+            left_hours: float,
+            max_steps: int = 1000
     ) -> datetime:
         if left_hours == 0:
             return start_date
 
         date = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, 0) - timedelta(days=1)
+
         days = 0
         while left_hours > 0:
             date += timedelta(days=1)
-            max_available = resource.get_available_units(date) - resource_usage.usage(resource, date)
+            reserved = resource_usage.reserved(resource, date) if self.__balance_resources \
+                else resource_usage.reserved(resource, date, task)
+
+            max_available = resource.get_available_units(date) - reserved
             if max_available > 0:
-                left_hours -= resource_usage.reserve(resource, date, min(left_hours, max_available))
+                left_hours -= resource_usage.reserve(resource, date, task, min(left_hours, max_available))
             days += 1
 
-            if days > 1000:
+            if days > max_steps:
                 raise RuntimeError("Can't calculate")
 
-        reserved = resource_usage.usage(resource, date)
+        reserved = resource_usage.reserved(resource, date)
         percent = reserved / resource.get_available_units(date)
-        date += timedelta(hours=24 * percent)
+        return date + timedelta(hours=24 * percent)
 
-        return date
-
-    def __calc_task_dates(
+    def __forward_pass(
             self,
             _task: Task,
             min_date: datetime,
@@ -172,14 +224,14 @@ class DefaultScheduler(IScheduler):
             return
 
         for pred in _task.predecessors:
-            self.__calc_task_dates(pred, min_date, resource_usage, calculated)
+            self.__forward_pass(pred, min_date, resource_usage, calculated)
 
         max_predecessor_ends = max([t.end for t in _task.predecessors if t.end is not None] + [min_date])
 
         for ch in _task.children:
-            self.__calc_task_dates(ch, max_predecessor_ends, resource_usage, calculated)
+            self.__forward_pass(ch, max_predecessor_ends, resource_usage, calculated)
 
-        resource = self.__resources.get(_task.resource, DEFAULT_RESOURCE)
+        resource = self.__resources.setdefault(_task.resource, Resource(_task.resource))
 
         is_leaf = len(_task.children) == 0
 
@@ -191,7 +243,9 @@ class DefaultScheduler(IScheduler):
             if _task.start is None:
                 if is_leaf:
                     _task.start = max(max_predecessor_ends, datetime.now())
-                    _task.start = self.__get_resource_nearest_available_date(resource, resource_usage, _task.start)
+                    _task.start = self.__get_resource_nearest_available_date(
+                        resource, resource_usage, _task.start, _task
+                    )
                 else:
                     children_starts = [t.start for t in _task.children if t.start is not None]
                     if len(children_starts) == 0:
@@ -215,11 +269,179 @@ class DefaultScheduler(IScheduler):
                     left_hours = max(_task.estimate - _task.spent, 0)
                     start = max(_task.start, datetime.now())
                     _task.end = max(
-                        self.__shift_by_resource_usage_and_calendar(resource, resource_usage, start, left_hours),
+                        self.__shift_by_resource_usage_and_calendar(
+                            resource, resource_usage, start, _task, left_hours
+                        ),
                         datetime.now()
                     )
                 else:
                     _task.end = max([t.end for t in _task.children if t.end is not None])
+
+        calculated.append(_task.id)
+
+    def calc(self, wbs: WBS) -> Schedule:
+        _validate_graph_isolation(wbs)
+        _check_loops(wbs)
+        self.__check_no_end_dates_in_future(wbs)
+
+        forward = wbs.clone()
+        self.__prepare_tasks(forward)
+
+        forward_resource_usage = ResourceUsage()
+        calculated = []
+        for t in forward.roots:
+            self.__forward_pass(t, self.__start, forward_resource_usage, calculated)
+
+        return Schedule(forward, forward_resource_usage)
+
+    @staticmethod
+    def __check_no_end_dates_in_future(project: WBS):
+        now = datetime.now()
+        for t in project.tasks:
+            if t.end is not None and t.end > now:
+                raise RuntimeError(f"Task {t.id} has end date in future. Can't schedule this task.")
+
+    @staticmethod
+    def __prepare_tasks(project: WBS):
+        for t in project.tasks:
+            if len(t.children) > 0:
+                t.start = t.end = t.estimate = t.spent = None
+
+
+class BackwardScheduler(IScheduler):
+    def __init__(
+            self,
+            end: datetime = None,
+            resources: List[IResource] = None,
+            balance_resources: bool = True,
+            default_estimate: int = 0
+    ):
+        self.__end = end if end is not None else datetime.now()
+        self.__resources = {} if resources is None else {r.name: r for r in resources}
+        self.__balance_resources = balance_resources
+        self.__default_estimate = default_estimate
+
+    def __get_resource_nearest_available_date(
+            self,
+            resource: IResource,
+            resource_usage: ResourceUsage,
+            start_date: datetime,
+            task: Task,
+            max_steps: int = 1000
+    ) -> datetime:
+        d = resource.get_nearest_availability_date(start_date, -1) - timedelta(days=1)
+
+        for i in range(0, max_steps):
+            reserved = resource_usage.reserved(resource, d) if self.__balance_resources \
+                else resource_usage.reserved(resource, d, task)
+
+            available = resource.get_available_units(d) - reserved
+            if available > 0:
+                percent = 1 - available / resource.get_available_units(d)
+                d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) - timedelta(hours=24 * percent)
+                return d
+            d += timedelta(days=-1)
+
+        raise RuntimeError(
+            "Can't find nearest availability time for resource", resource.name,
+            "after", start_date.strftime('%Y-%m-%d')
+        )
+
+    def __shift_by_resource_usage_and_calendar(
+            self,
+            resource: IResource,
+            resource_usage: ResourceUsage,
+            start_date: datetime,
+            task: Task,
+            left_hours: float,
+            max_steps: int = 1000
+    ) -> datetime:
+        if left_hours == 0:
+            return start_date
+
+        date = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, 0)
+
+        days = 0
+        while left_hours > 0:
+            date += timedelta(days=-1)
+            reserved = resource_usage.reserved(resource, date) if self.__balance_resources \
+                else resource_usage.reserved(resource, date, task)
+
+            max_available = resource.get_available_units(date) - reserved
+            if max_available > 0:
+                left_hours -= resource_usage.reserve(resource, date, task, min(left_hours, max_available))
+            days += 1
+
+            if days > max_steps:
+                raise RuntimeError("Can't calculate")
+
+        reserved = resource_usage.reserved(resource, date)
+        percent = reserved / resource.get_available_units(date)
+
+        return date + timedelta(days=1) - timedelta(hours=24 * percent)
+
+    def __backward_pass(
+            self,
+            _task: Task,
+            min_date: datetime,
+            resource_usage: ResourceUsage,
+            calculated: List[int]
+    ):
+        if _task.id in calculated:
+            return
+
+        for pred in _task.successors:
+            self.__backward_pass(pred, min_date, resource_usage, calculated)
+
+        min_successor_starts = min([t.start for t in _task.successors if t.start is not None] + [min_date])
+
+        for ch in reversed(_task.children):
+            self.__backward_pass(ch, min_successor_starts, resource_usage, calculated)
+
+        resource = self.__resources.setdefault(_task.resource, Resource(_task.resource))
+
+        is_leaf = len(_task.children) == 0
+
+        if _task.milestone:
+            _task.start = _task.end = min_successor_starts
+            _task.estimate = 0
+            _task.spent = 0
+        else:
+            if _task.end is None:
+                if is_leaf:
+                    _task.end = min_successor_starts
+                    _task.end = self.__get_resource_nearest_available_date(resource, resource_usage, _task.end, _task)
+                    _task.end += timedelta(days=1)
+                else:
+                    children_ends = [t.end for t in _task.children if t.end is not None]
+                    if len(children_ends) == 0:
+                        _task.end = min_date
+                    else:
+                        _task.end = min(max(children_ends), min_date)
+
+            if _task.estimate is None:
+                if is_leaf:
+                    _task.estimate = self.__default_estimate
+                else:
+                    _task.estimate = sum([ch.estimate for ch in _task.children])
+
+            if _task.spent is None:
+                if is_leaf:
+                    _task.spent = 0
+                else:
+                    _task.spent = sum([ch.spent for ch in _task.children])
+
+            if is_leaf:
+                left_hours = max(_task.estimate - _task.spent, 0)
+                end = min(_task.end, min_date)
+                start = self.__shift_by_resource_usage_and_calendar(
+                    resource, resource_usage, end, _task, left_hours
+                )
+                if _task.start is not None:
+                    start = min(_task.start, start)
+                _task.start = start
+            else:
+                _task.start = min([t.start for t in _task.children if t.start is not None])
 
         calculated.append(_task.id)
 
@@ -230,46 +452,17 @@ class DefaultScheduler(IScheduler):
                 t.start = t.end = t.estimate = t.spent = None
 
     def calc(self, project: WBS) -> Schedule:
-        res = project.clone()
+        _validate_graph_isolation(project)
+        _check_loops(project)
 
-        self.__validate_graph_isolation(res)
-        self.__check_loops(res)
-        self.__prepare_tasks(res)
-        resource_usage = ResourceUsage()
+        backward = project.clone()
+        self.__prepare_tasks(backward)
+
+        backward_resource_usage = ResourceUsage()
+        backward_roots = backward.roots
+
         calculated = []
-        for t in res.roots:
-            self.__calc_task_dates(t, self.__start, resource_usage, calculated)
+        for i in range(len(backward_roots) - 1, -1, -1):
+            self.__backward_pass(backward_roots[i], self.__end, backward_resource_usage, calculated)
 
-        return Schedule(res, resource_usage)
-
-    @staticmethod
-    def __validate_graph_isolation(project: WBS):
-        all_tasks = {task.id: task for task in project.tasks}
-
-        for t in all_tasks.values():
-            for pr in t.predecessors:
-                if pr.id not in all_tasks and (not pr.start or not pr.end):
-                    raise RuntimeError(f"Task {t.id} ({t.name}) has predecessor {pr.id} ({pr.name}) w/o dates and outside wbs")
-
-    def __check_loops(self, project: WBS):
-        validated = set()
-        for t in project.tasks:
-            self.__check_loops_from_task(t, set(), validated)
-
-    def __check_loops_from_task(self, task: Task, visited_tasks: Set[int], validated: Set[int]):
-        if task.id in validated:
-            return
-
-        if task.id in visited_tasks:
-            raise RuntimeError(
-                "Found circle",
-                [str(t) + "-->" for t in visited_tasks] + [str(task.id) + ":" + task.name]
-            )
-
-        visited_tasks.add(task.id)
-
-        for s in task.predecessors:
-            self.__check_loops_from_task(s, visited_tasks, validated)
-
-        visited_tasks.remove(task.id)
-        validated.add(task.id)
+        return Schedule(backward, backward_resource_usage)

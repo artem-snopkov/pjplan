@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Union, Iterable, Callable, Any
 
-from pjplan.alg.critical_path import CriticalPathCalculator, CriticalPath
+from pjplan.alg.critical_path import CriticalPathCalculator
 from pjplan.task import Task, EMPTY_TASK_ID, _ChildrenList, _ImmutableTaskList, _to_list, _Repr
 
 
@@ -159,8 +159,13 @@ class WBS:
         """
         return self.__clone(_to_list(roots))
 
-    def critical_path(self) -> CriticalPath:
-        return CriticalPathCalculator(self.tasks, self.end).calc()
+    def critical_path(self) -> _ImmutableTaskList:
+        """
+        Calculate critical path based on tasks dependencies, estimates and spent times.
+        Resources are not taken into account
+        :return: list of tasks from WBS at critical path
+        """
+        return CriticalPathCalculator(self.tasks, None).calc()
 
     def __repr__(self) -> str:
         return _Repr.repr(self.roots)

@@ -1,4 +1,3 @@
-import sys
 from datetime import datetime
 from typing import List, Dict, Any, Iterable, Optional
 
@@ -37,19 +36,6 @@ class _PLink:
         self.start = start
         self.end = end
         self.units = units
-
-
-class CriticalPath:
-
-    def __init__(self, tasks: Iterable[Task]):
-        self.__tasks = _ImmutableTaskList([t for t in tasks])
-
-    @property
-    def tasks(self) -> _ImmutableTaskList:
-        return self.__tasks
-
-    def __repr__(self):
-        return self.__tasks.__repr__()
 
 
 class CriticalPathCalculator:
@@ -136,7 +122,7 @@ class CriticalPathCalculator:
 
             node.end_units = min_end
 
-    def calc(self) -> CriticalPath:
+    def calc(self) -> _ImmutableTaskList:
 
         start_nodes = [n for n in self.__nodes if len(n.backward_links) == 0]
         end_nodes = [n for n in self.__nodes if len(n.forward_links) == 0]
@@ -164,7 +150,7 @@ class CriticalPathCalculator:
                 res.append(self.__tasks[k])
 
         if self.__end_date is None:
-            return CriticalPath(res)
+            return _ImmutableTaskList(res)
         else:
             critical_tasks_clusters = _find_clusters(res)
 
@@ -176,5 +162,5 @@ class CriticalPathCalculator:
                         break
 
             res = sorted(res, key=lambda x: x.start)
-            return CriticalPath(res)
+            return _ImmutableTaskList(res)
 

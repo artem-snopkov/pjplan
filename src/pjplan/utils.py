@@ -16,12 +16,13 @@ def colored(text, color):
     else:
         return text
 
+
 def colored_text(text, width, color, bg_color):
     c = color if color is not None else ''
     if bg_color is not None:
         c += ':' + bg_color
 
-    text = text + ' '* (width - len(text))
+    text = text + ' ' * (width - len(text))
 
     if len(c) > 0:
         return '\033[' + color + text + '\033[0m'
@@ -30,7 +31,7 @@ def colored_text(text, width, color, bg_color):
 
 
 class _TextTableCell:
-    def __init__(self, text:str = None, color: str = None, bg_color: str = None):
+    def __init__(self, text: str = None, color: str = None, bg_color: str = None):
         self.text = text
         self.color = color
         self.bg_color = bg_color

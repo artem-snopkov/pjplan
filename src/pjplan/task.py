@@ -137,6 +137,7 @@ class _Repr:
 
         return max_len
 
+    # noinspection PyUnresolvedReferences
     @staticmethod
     def __print_task_subtree(task: 'Task', fields: Iterable[str], level, table: TextTable, children, theme):
         values = []
@@ -231,7 +232,8 @@ class _ImmutableTaskList:
             for k, v in kw.items():
                 if k.endswith("_like_"):
                     k = k[0:-6]
-                    if not re.search(v, self.__get_task_attribute(t, k)):
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not re.search(v, val):
                         return False
                 elif k.endswith("_not_in_"):
                     k = k[0:-8]
@@ -340,6 +342,9 @@ class _ImmutableTaskList:
 
     def __getitem__(self, query):
         return self._list.__getitem__(query)
+
+    def __eq__(self, other):
+        return self._list.__eq__(other)
 
     def __str__(self) -> str:
         return self._list.__str__()

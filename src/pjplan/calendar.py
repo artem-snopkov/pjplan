@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import List, Dict, Optional, Union, Iterable, Callable
 
-from pjplan.utils import colored, GREEN, GREY, TextTable
+from pjplan.utils import GREEN, GREY, TextTable
 
 _WEEK_DAY_NAMES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 
