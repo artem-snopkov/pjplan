@@ -1,0 +1,29 @@
+name: Build docs
+
+on:
+  # To trigger the workflow once you push to the `main` branch
+  # Replace `main` with your branch’s name
+  push:
+    branches: [ "main" ]
+
+  #To run the workflow manually from the Actions tab on GitHub.
+  workflow_dispatch:
+
+env:
+  PRODUCT: pjplan/docs_ru
+  DOC_ARTIFACT: webHelpXX2-all.zip
+
+jobs:
+  build-job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Build Writerside docs using Docker
+        uses: JetBrains/writerside-github-action@v3
+      - name: Upload documentation
+        uses: actions/upload-artifact@v3
+        with:
+          name: help
+          path: artifacts/${{ env.DOC_ARTIFACT }}
+          retention-days: 7

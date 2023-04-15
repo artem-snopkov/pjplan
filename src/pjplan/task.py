@@ -239,29 +239,44 @@ class _ImmutableTaskList:
                     k = k[0:-8]
                     if self.__get_task_attribute(t, k) in v:
                         return False
+                elif k.endswith("_is_none_"):
+                    k = k[0:-9]
+                    val = self.__get_task_attribute(t, k)
+                    if val is not None:
+                        return False
+                elif k.endswith("_is_not_none_"):
+                    k = k[0:-13]
+                    val = self.__get_task_attribute(t, k)
+                    if val is None:
+                        return False
                 elif k.endswith("_in_"):
                     k = k[0:-4]
                     if not self.__get_task_attribute(t, k) in v:
                         return False
                 elif k.endswith("_ne_"):
                     k = k[0:-4]
-                    if not self.__get_task_attribute(t, k) != v:
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not val != v:
                         return False
                 elif k.endswith("_le_"):
                     k = k[0:-4]
-                    if not self.__get_task_attribute(t, k) <= v:
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not val <= v:
                         return False
                 elif k.endswith("_lt_"):
                     k = k[0:-4]
-                    if not self.__get_task_attribute(t, k) < v:
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not val < v:
                         return False
                 elif k.endswith("_ge_"):
                     k = k[0:-4]
-                    if not self.__get_task_attribute(t, k) >= v:
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not val >= v:
                         return False
                 elif k.endswith("_gt_"):
                     k = k[0:-4]
-                    if not self.__get_task_attribute(t, k) > v:
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or not val > v:
                         return False
                 elif self.__get_task_attribute(t, k) != v:
                     return False

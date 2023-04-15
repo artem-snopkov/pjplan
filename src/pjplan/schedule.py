@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Set
+from typing import List, Set, Iterable
 
 from pjplan import Task, WBS, IResource, Resource
 from pjplan.utils import TextTable, GREEN, YELLOW, GREY, RED
@@ -98,7 +98,8 @@ class ResourceUsage:
         table.new_row()
         table.new_cell('DATE', RED)
         for k in resources:
-            table.new_cell(k.name.upper(), RED)
+            name = k.name if k.name is not None else 'none'
+            table.new_cell(name.upper(), RED)
 
         d = min_date
         while d <= max_date:
@@ -123,6 +124,8 @@ class Schedule:
     """WBS schedule result"""
     schedule: WBS
     """Clone of original WBS with calculated start and end dates on each task"""
+    resources: List[IResource]
+    """List of resources"""
     resource_usage: ResourceUsage
     """Resource usage report"""
 
@@ -292,7 +295,7 @@ class ForwardScheduler(IScheduler):
         for t in forward.roots:
             self.__forward_pass(t, self.__start, forward_resource_usage, calculated)
 
-        return Schedule(forward, forward_resource_usage)
+        return Schedule(forward, list(self.__resources.values()), forward_resource_usage)
 
     @staticmethod
     def __check_no_end_dates_in_future(project: WBS):
@@ -465,4 +468,4 @@ class BackwardScheduler(IScheduler):
         for i in range(len(backward_roots) - 1, -1, -1):
             self.__backward_pass(backward_roots[i], self.__end, backward_resource_usage, calculated)
 
-        return Schedule(backward, backward_resource_usage)
+        return Schedule(backward, list(self.__resources.values()), backward_resource_usage)
