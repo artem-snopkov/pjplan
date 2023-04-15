@@ -15,7 +15,7 @@ permissions:
     pages: write
 
 env:
-    PRODUCT: pjplan/docs_ru
+    PRODUCT: docs/docs_ru
     DOC_ARTIFACT: webHelpdocs_ru2-all.zip
 
 jobs:
