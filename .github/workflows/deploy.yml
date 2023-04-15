@@ -16,7 +16,7 @@ permissions:
 
 env:
     PRODUCT: docs/ru
-    DOC_ARTIFACT: webHelpdocs_ru2-all.zip
+    DOC_ARTIFACT: webHelpRU2-all.zip
 
 jobs:
     build-job:
