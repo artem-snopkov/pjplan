@@ -116,7 +116,7 @@ class DhtmlxGantt:
         links = []
 
         link_id = 0
-        for _root in self.wbs.tasks:
+        for _root in self.wbs.roots:
             for t in _root.all_children + [_root]:
 
                 progress = 0

@@ -1,5 +1,4 @@
 # pjplan: Python library for project planning and analysis
-=============================
 
 **pjplan** turns your [Jupyter Notebook](https://jupyter.org/) into project management software. 
 This Python package gives you a simple API with following features:

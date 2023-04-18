@@ -9,7 +9,7 @@ pjplan: Python library for project planning and analysis
 ==================================
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Contents:
 
    Englist <en/index>

@@ -28,3 +28,8 @@ language = 'en'
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
+
+html_theme_options = {
+    'page_width': '1200px',
+    'body_min_width': '1000px'
+}
