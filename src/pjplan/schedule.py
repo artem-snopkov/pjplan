@@ -1,7 +1,8 @@
+import dataclasses
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import List, Set, Iterable
+from typing import List, Set, Callable
 
 from pjplan import Task, WBS, IResource, Resource
 from pjplan.utils import TextTable, GREEN, YELLOW, GREY, RED
@@ -56,43 +57,33 @@ class ResourceUsageRow:
     """Units of resource reserved for this resource, task and date"""
 
 
-class ResourceUsage:
+class ResourceUsageReport:
     """Resource usage report"""
 
-    def __init__(self):
-        self.__items: List[ResourceUsageRow] = []
+    def __init__(self, rows: List[ResourceUsageRow]):
+        self.__rows = rows
 
-    @staticmethod
-    def __get_key(date: datetime):
-        return datetime(date.year, date.month, date.day, 0, 0, 0, 0)
+    def rows(self, _filter: Callable[[ResourceUsageRow], bool] = None) -> List[ResourceUsageRow]:
+        return [dataclasses.replace(r)
+                for r in self.__rows
+                if _filter is None or _filter(r)]
 
-    def reserve(self, resource: IResource, date: datetime, task: Task, units: float) -> float:
-        self.__items.append(ResourceUsageRow(resource, self.__get_key(date), task, units))
-        return units
+    def reserved(self, resource: IResource, date: datetime) -> float:
+        units = [item.units
+                 for item in self.__rows
+                 if item.resource == resource and item.date == date]
 
-    def reserved(self, resource: IResource, date: datetime, task: Task = None) -> float:
-        if task is None:
-            rows = [item.units for item in self.__items if
-                    item.resource == resource and item.date == self.__get_key(date)]
-        else:
-            rows = [item.units for item in self.__items if
-                    item.resource == resource and item.date == self.__get_key(date) and item.task == task]
-        if len(rows) == 0:
-            return 0
-        return sum(rows)
-
-    def rows(self) -> List[ResourceUsageRow]:
-        return self.__items
+        return sum(units, 0)
 
     def __repr__(self):
-        if len(self.__items) == 0:
+        if len(self.__rows) == 0:
             return "Empty"
 
-        dates = [item.date for item in self.__items]
+        dates = [item.date for item in self.__rows]
         min_date = min(dates)
         max_date = max(dates)
 
-        resources = set([item.resource for item in self.__items])
+        resources = set([item.resource for item in self.__rows])
 
         table = TextTable()
         table.new_row()
@@ -119,6 +110,32 @@ class ResourceUsage:
         return table.text_repr(True)
 
 
+class _ResourceUsage:
+
+    def __init__(self):
+        self.rows: List[ResourceUsageRow] = []
+
+    @staticmethod
+    def __get_key(date: datetime):
+        return datetime(date.year, date.month, date.day, 0, 0, 0, 0)
+
+    def reserve(self, resource: IResource, date: datetime, task: Task, units: float) -> float:
+        self.rows.append(ResourceUsageRow(resource, self.__get_key(date), task, units))
+        return units
+
+    def reserved(self, resource: IResource, date: datetime, task: Task = None) -> float:
+        if task is None:
+            units = [item.units
+                     for item in self.rows
+                     if item.resource == resource and item.date == self.__get_key(date)]
+        else:
+            units = [item.units
+                     for item in self.rows
+                     if item.resource == resource and item.date == self.__get_key(date) and item.task == task]
+
+        return sum(units, 0)
+
+
 @dataclass(frozen=True)
 class Schedule:
     """WBS schedule result"""
@@ -126,7 +143,7 @@ class Schedule:
     """Clone of original WBS with calculated start and end dates on each task"""
     resources: List[IResource]
     """List of resources"""
-    resource_usage: ResourceUsage
+    resource_usage: ResourceUsageReport
     """Resource usage report"""
 
 
@@ -161,7 +178,7 @@ class ForwardScheduler(IScheduler):
     def __get_resource_nearest_available_date(
             self,
             resource: IResource,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             start_date: datetime,
             task: Task,
             max_steps: int = 1000
@@ -187,7 +204,7 @@ class ForwardScheduler(IScheduler):
     def __shift_by_resource_usage_and_calendar(
             self,
             resource: IResource,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             start_date: datetime,
             task: Task,
             left_hours: float,
@@ -220,7 +237,7 @@ class ForwardScheduler(IScheduler):
             self,
             _task: Task,
             min_date: datetime,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             calculated: List[int]
     ):
         if _task.id in calculated:
@@ -290,12 +307,16 @@ class ForwardScheduler(IScheduler):
         forward = wbs.clone()
         self.__prepare_tasks(forward)
 
-        forward_resource_usage = ResourceUsage()
+        forward_resource_usage = _ResourceUsage()
         calculated = []
         for t in forward.roots:
             self.__forward_pass(t, self.__start, forward_resource_usage, calculated)
 
-        return Schedule(forward, list(self.__resources.values()), forward_resource_usage)
+        return Schedule(
+            forward,
+            list(self.__resources.values()),
+            ResourceUsageReport(forward_resource_usage.rows)
+        )
 
     @staticmethod
     def __check_no_end_dates_in_future(project: WBS):
@@ -327,7 +348,7 @@ class BackwardScheduler(IScheduler):
     def __get_resource_nearest_available_date(
             self,
             resource: IResource,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             start_date: datetime,
             task: Task,
             max_steps: int = 1000
@@ -353,7 +374,7 @@ class BackwardScheduler(IScheduler):
     def __shift_by_resource_usage_and_calendar(
             self,
             resource: IResource,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             start_date: datetime,
             task: Task,
             left_hours: float,
@@ -387,7 +408,7 @@ class BackwardScheduler(IScheduler):
             self,
             _task: Task,
             min_date: datetime,
-            resource_usage: ResourceUsage,
+            resource_usage: _ResourceUsage,
             calculated: List[int]
     ):
         if _task.id in calculated:
@@ -461,11 +482,15 @@ class BackwardScheduler(IScheduler):
         backward = project.clone()
         self.__prepare_tasks(backward)
 
-        backward_resource_usage = ResourceUsage()
+        backward_resource_usage = _ResourceUsage()
         backward_roots = backward.roots
 
         calculated = []
         for i in range(len(backward_roots) - 1, -1, -1):
             self.__backward_pass(backward_roots[i], self.__end, backward_resource_usage, calculated)
 
-        return Schedule(backward, list(self.__resources.values()), backward_resource_usage)
+        return Schedule(
+            backward,
+            list(self.__resources.values()),
+            ResourceUsageReport(backward_resource_usage.rows)
+        )

@@ -14,7 +14,7 @@ release = '0.0.8'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ['myst_parser', 'nbsphinx']
+extensions = ['myst_parser', 'nbsphinx', 'sphinxcontrib.fulltoc']
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
@@ -33,3 +33,5 @@ html_theme_options = {
     'page_width': '1200px',
     'body_min_width': '1000px'
 }
+
+html_sidebars = { '**': ['localtoc.html', 'relations.html'] }
