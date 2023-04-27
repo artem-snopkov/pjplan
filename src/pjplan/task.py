@@ -607,12 +607,12 @@ class Task:
         """
         :param id: task id, unique in task graph
         :param name: task name
-        :param resource: resource name (person, machine, etc.), necessary to perform task
+        :param resource: name of resource (person, machine, etc.), necessary to perform task
         :param start: task start date
         :param end: task end date
         :param milestone: is task milestone or not
-        :param estimate: task estimation in hours
-        :param spent: task completed work in hours
+        :param estimate: task estimation
+        :param spent: task completed work
         :param predecessors: predecessor tasks
         :param successors: successor tasks
         :param kwargs: additional task attributes

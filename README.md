@@ -38,15 +38,16 @@ pip install pjplan
 ## Getting started
 
 Let's define simple project WBS:
+
 ```python
 from pjplan import WBS, Task
 
 with WBS() as prj:
-  prj // Task(1, 'Task 1', estimate=40, resource='Developer')
-  prj // Task(2, 'Task 2', predecessors=[prj[1]], estimate=20, resource='Developer')
-  with prj // Task(3, 'Task 3') as t3:
-    t3 // Task(4, 'Task 4', predecessors=[prj[2]], estimate=100, resource='Tester')
-    t3 // Task(5, 'Task 5', predecessors=[prj[2]], estimate=50, resource='Tester')
+    prj // Task(1, 'Task 1', estimate=40, resource_name='Developer')
+    prj // Task(2, 'Task 2', predecessors=[prj[1]], estimate=20, resource_name='Developer')
+    with prj // Task(3, 'Task 3') as t3:
+        t3 // Task(4, 'Task 4', predecessors=[prj[2]], estimate=100, resource_name='Tester')
+        t3 // Task(5, 'Task 5', predecessors=[prj[2]], estimate=50, resource_name='Tester')
 ```
 
 Let's define resources:
