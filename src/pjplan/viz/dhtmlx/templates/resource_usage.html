@@ -38,7 +38,7 @@
                     unit: "week", step: 1, format: function (date) {
                         var dateToStr = gantt.date.date_to_str("%d.%m");
                         var endDate = gantt.date.add(date, -6, "day");
-                        return dateToStr(date) + " - " + dateToStr(endDate);
+                        return dateToStr(endDate) + " - " + dateToStr(date);
                     }
                 }
             ],

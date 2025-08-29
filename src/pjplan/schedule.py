@@ -121,6 +121,7 @@ class _ResourceUsage:
 
     def reserve(self, resource: IResource, date: datetime, task: Task, units: float) -> float:
         self.rows.append(ResourceUsageRow(resource, self.__get_key(date), task, units))
+        resource.reserve(date, task, units)
         return units
 
     def reserved(self, resource: IResource, date: datetime, task: Task = None) -> float:
@@ -181,7 +182,7 @@ class ForwardScheduler(IScheduler):
             resource_usage: _ResourceUsage,
             start_date: datetime,
             task: Task,
-            max_steps: int = 1000
+            max_steps: int = 100000
     ) -> datetime:
         d = resource.get_nearest_availability_date(start_date, 1)
 
@@ -189,9 +190,9 @@ class ForwardScheduler(IScheduler):
             reserved = resource_usage.reserved(resource, d) if self.__balance_resources \
                 else resource_usage.reserved(resource, d, task)
 
-            available = resource.get_available_units(d) - reserved
+            available = resource.get_available_units(d, task) - reserved
             if available > 0:
-                percent = 1 - available / resource.get_available_units(d)
+                percent = 1 - available / resource.get_available_units(d, task)
                 d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) + timedelta(hours=24 * percent)
                 return d
             d += timedelta(days=1)
@@ -208,7 +209,7 @@ class ForwardScheduler(IScheduler):
             start_date: datetime,
             task: Task,
             left_hours: float,
-            max_steps: int = 1000
+            max_steps: int = 100000
     ) -> datetime:
         if left_hours == 0:
             return start_date
@@ -216,21 +217,24 @@ class ForwardScheduler(IScheduler):
         date = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, 0) - timedelta(days=1)
 
         days = 0
+        date_available_units = 0
         while left_hours > 0:
             date += timedelta(days=1)
             reserved = resource_usage.reserved(resource, date) if self.__balance_resources \
                 else resource_usage.reserved(resource, date, task)
 
-            max_available = resource.get_available_units(date) - reserved
+            date_available_units = resource.get_available_units(date, task)
+            max_available = date_available_units - reserved
             if max_available > 0:
                 left_hours -= resource_usage.reserve(resource, date, task, min(left_hours, max_available))
             days += 1
 
             if days > max_steps:
-                raise RuntimeError("Can't calculate")
+                raise RuntimeError(f"Can't calculate {resource}, {start_date}, {max_steps}, {left_hours}")
 
-        reserved = resource_usage.reserved(resource, date)
-        percent = reserved / resource.get_available_units(date)
+        reserved = resource_usage.reserved(resource, date) if self.__balance_resources \
+            else resource_usage.reserved(resource, date, task)
+        percent = reserved / date_available_units
         return date + timedelta(hours=24 * percent)
 
     def __forward_pass(
@@ -359,9 +363,9 @@ class BackwardScheduler(IScheduler):
             reserved = resource_usage.reserved(resource, d) if self.__balance_resources \
                 else resource_usage.reserved(resource, d, task)
 
-            available = resource.get_available_units(d) - reserved
+            available = resource.get_available_units(d, task) - reserved
             if available > 0:
-                percent = 1 - available / resource.get_available_units(d)
+                percent = 1 - available / resource.get_available_units(d, task)
                 d = datetime(d.year, d.month, d.day, 0, 0, 0, 0) - timedelta(hours=24 * percent)
                 return d
             d += timedelta(days=-1)
@@ -378,7 +382,7 @@ class BackwardScheduler(IScheduler):
             start_date: datetime,
             task: Task,
             left_hours: float,
-            max_steps: int = 1000
+            max_steps: int = 100000
     ) -> datetime:
         if left_hours == 0:
             return start_date
@@ -391,7 +395,7 @@ class BackwardScheduler(IScheduler):
             reserved = resource_usage.reserved(resource, date) if self.__balance_resources \
                 else resource_usage.reserved(resource, date, task)
 
-            max_available = resource.get_available_units(date) - reserved
+            max_available = resource.get_available_units(date, task) - reserved
             if max_available > 0:
                 left_hours -= resource_usage.reserve(resource, date, task, min(left_hours, max_available))
             days += 1
@@ -400,7 +404,7 @@ class BackwardScheduler(IScheduler):
                 raise RuntimeError("Can't calculate")
 
         reserved = resource_usage.reserved(resource, date)
-        percent = reserved / resource.get_available_units(date)
+        percent = reserved / resource.get_available_units(date, task)
 
         return date + timedelta(days=1) - timedelta(hours=24 * percent)
 
