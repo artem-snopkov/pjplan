@@ -113,6 +113,10 @@ class _Repr:
             return _Repr.__get_linked_task_id(t, t.parent)
         if field == 'id':
             return str(t.id)
+        if field == 'estimate':
+            return '-' if t.estimate is None else str(t.estimate)
+        if field == 'spent':
+            return '-' if t.spent is None else str(t.spent)
 
         if field not in t.__dict__:
             field = field.lower()
@@ -230,7 +234,12 @@ class _ImmutableTaskList:
 
         def search(t, **kw):
             for k, v in kw.items():
-                if k.endswith("_like_"):
+                if k.endswith("_not_like_"):
+                    k = k[0:-10]
+                    val = self.__get_task_attribute(t, k)
+                    if val is None or re.search(v, val):
+                        return False
+                elif k.endswith("_like_"):
                     k = k[0:-6]
                     val = self.__get_task_attribute(t, k)
                     if val is None or not re.search(v, val):
