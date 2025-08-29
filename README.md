@@ -96,4 +96,173 @@ write_csv(schedule.schedule, "schedule.csv")
 
 ## More examples
 
+### Simple Task Creation
+
+For simpler projects, you can create tasks directly without the WBS context manager:
+
+```python
+import pjplan
+
+# Create tasks with dependencies
+kickoff = pjplan.Task("A", name="Kickoff", estimate=2)
+requirements = pjplan.Task("B", name="Requirements", estimate=5, predecessors=[kickoff])
+design = pjplan.Task("C", name="Design", estimate=6, predecessors=[requirements])
+
+# Schedule the tasks
+wbs = pjplan.WBS([kickoff, requirements, design])
+scheduler = pjplan.ForwardScheduler()
+schedule = scheduler.calc(wbs)
+```
+
+### Export to JSON
+
+Export your project schedule to JSON format for integration with other tools:
+
+```python
+import json
+import pjplan
+
+# Create a simple project
+tasks = []
+tasks.append(pjplan.Task("PROJ-1", name="Project Setup", estimate=3))
+tasks.append(pjplan.Task("PROJ-2", name="Development", estimate=10, predecessors=[tasks[0]]))
+tasks.append(pjplan.Task("PROJ-3", name="Testing", estimate=5, predecessors=[tasks[1]]))
+tasks.append(pjplan.Task("PROJ-4", name="Deployment", estimate=2, predecessors=[tasks[2]]))
+
+# Schedule and export
+wbs = pjplan.WBS(tasks)
+scheduler = pjplan.ForwardScheduler()
+schedule = scheduler.calc(wbs)
+
+# Export to JSON
+task_data = []
+for task in schedule.schedule.tasks:
+    task_dict = {
+        "id": task.id,
+        "name": task.name,
+        "estimate": getattr(task, 'estimate', None),
+        "start": str(getattr(task, 'start', None)).split(' ')[0] if getattr(task, 'start', None) else None,
+        "end": str(getattr(task, 'end', None)).split(' ')[0] if getattr(task, 'end', None) else None
+    }
+    task_data.append(task_dict)
+
+project_json = {"project_name": "Sample Project", "tasks": task_data}
+print(json.dumps(project_json, indent=2))
+```
+
+### Critical Path Analysis
+
+Identify the critical path in your project to understand which tasks drive the overall timeline:
+
+```python
+import pjplan
+
+# Create a project with parallel paths
+task_a = pjplan.Task("A", name="Requirements", estimate=5)
+task_b = pjplan.Task("B", name="UI Design", estimate=8, predecessors=[task_a])
+task_c = pjplan.Task("C", name="Backend API", estimate=12, predecessors=[task_a])  # Longer path
+task_d = pjplan.Task("D", name="Integration", estimate=4, predecessors=[task_b, task_c])
+task_e = pjplan.Task("E", name="Testing", estimate=6, predecessors=[task_d])
+
+# Schedule the project
+wbs = pjplan.WBS([task_a, task_b, task_c, task_d, task_e])
+scheduler = pjplan.ForwardScheduler()
+schedule = scheduler.calc(wbs)
+
+# Find critical path
+critical_path = schedule.schedule.critical_path()
+critical_task_ids = [task.id for task in critical_path] if critical_path else []
+print(f"Critical path: {critical_task_ids}")
+
+# Show critical status for all tasks
+for task in schedule.schedule.tasks:
+    is_critical = task in critical_path if critical_path else False
+    status = "CRITICAL" if is_critical else "non-critical"
+    print(f"Task {task.id} ({task.name}): {status}")
+```
+
+### Resource-Constrained Scheduling
+
+Schedule tasks with different resource calendars and constraints:
+
+```python
+from datetime import datetime
+import pjplan
+
+# Create resources with different working schedules
+full_time_calendar = pjplan.WeeklyCalendar(days=[0,1,2,3,4], units_per_day=8)  # Mon-Fri, 8 hours
+part_time_calendar = pjplan.WeeklyCalendar(days=[0,2,4], units_per_day=4)       # Mon,Wed,Fri, 4 hours
+
+developer = pjplan.Resource(name='Developer', calendar=full_time_calendar)
+consultant = pjplan.Resource(name='Consultant', calendar=part_time_calendar)
+
+# Create project with resource assignments
+with pjplan.WBS() as project:
+    project // pjplan.Task("T1", name="Analysis", estimate=16, resource_name='Developer')
+    project // pjplan.Task("T2", name="Design", estimate=24, resource_name='Developer', predecessors=[project["T1"]])
+    project // pjplan.Task("T3", name="Review", estimate=8, resource_name='Consultant', predecessors=[project["T2"]])
+    project // pjplan.Task("T4", name="Implementation", estimate=40, resource_name='Developer', predecessors=[project["T3"]])
+
+# Schedule with resource constraints
+scheduler = pjplan.ForwardScheduler(
+    start=datetime(2025, 9, 1),
+    resources=[developer, consultant]
+)
+schedule = scheduler.calc(project)
+
+# Display schedule
+for task in schedule.schedule.tasks:
+    resource = getattr(task, 'resource', 'Unassigned')
+    start_date = getattr(task, 'start', None)
+    end_date = getattr(task, 'end', None)
+    if start_date and end_date:
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+        print(f"{task.id}: {task.name} ({resource}) - {start_str} to {end_str}")
+```
+
+### Working with Milestones
+
+Track important project milestones and deliverables:
+
+```python
+from datetime import datetime
+import pjplan
+
+# Create project phases with milestones
+phase1_tasks = [
+    pjplan.Task("P1T1", name="Requirements Gathering", estimate=8),
+    pjplan.Task("P1T2", name="Stakeholder Approval", estimate=0, milestone=True),  # Milestone
+]
+phase1_tasks[1].predecessors = [phase1_tasks[0]]
+
+phase2_tasks = [
+    pjplan.Task("P2T1", name="System Design", estimate=16, predecessors=[phase1_tasks[1]]),
+    pjplan.Task("P2T2", name="Design Review", estimate=0, milestone=True),  # Milestone
+]
+phase2_tasks[1].predecessors = [phase2_tasks[0]]
+
+phase3_tasks = [
+    pjplan.Task("P3T1", name="Development", estimate=32, predecessors=[phase2_tasks[1]]),
+    pjplan.Task("P3T2", name="Code Complete", estimate=0, milestone=True),  # Milestone
+]
+phase3_tasks[1].predecessors = [phase3_tasks[0]]
+
+# Schedule the complete project
+all_tasks = phase1_tasks + phase2_tasks + phase3_tasks
+wbs = pjplan.WBS(all_tasks)
+scheduler = pjplan.ForwardScheduler(start=datetime(2025, 9, 1))
+schedule = scheduler.calc(wbs)
+
+# Show milestone dates
+milestones = [task for task in schedule.schedule.tasks if getattr(task, 'milestone', False)]
+print("Project Milestones:")
+for milestone in milestones:
+    date = getattr(milestone, 'start', None)
+    date_str = date.strftime('%Y-%m-%d') if date else 'Not scheduled'
+    print(f"  {milestone.name}: {date_str}")
+```
+
+## Additional Resources
+
 More examples you can find at [examples](https://github.com/artem-snopkov/pjplan/tree/main/examples) directory.
