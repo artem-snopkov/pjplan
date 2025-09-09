@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+from typing import Optional
 
-from pjplan import IWorkCalendar, DEFAULT_CALENDAR
+from pjplan import IWorkCalendar, DEFAULT_CALENDAR, Task
 
 
 class IResource(ABC):
@@ -14,10 +15,16 @@ class IResource(ABC):
         self.name = name
 
     @abstractmethod
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime, task: Optional[Task] = None) -> float:
+        """
+        Возвращает количество доступных рабочих часов ресурса в указанную дату
+        :param date: дата
+        :param task: задача, под которую нужны ресурсы. None, если конкретной задачи нет
+        :return: количество доступных часов ресурса
+        """
         pass
 
-    def get_nearest_availability_date(self, start_date: datetime, direction: int, max_days=100) -> datetime:
+    def get_nearest_availability_date(self, start_date: datetime, direction: int, max_days=100000) -> datetime:
         """
         Возвращает ближайшую дату доступности ресурса, начиная со start_date
         :param direction: 1 или -1
@@ -28,10 +35,10 @@ class IResource(ABC):
         step = 0
         while step < max_days:
             if direction < 0:
-                if self.get_available_units(start_date - timedelta(days=1)) > 0:
+                if self.get_available_units(start_date - timedelta(days=1), None) > 0.0:
                     return start_date
             else:
-                if self.get_available_units(start_date) > 0:
+                if self.get_available_units(start_date, None) > 0.0:
                     return start_date
             start_date += timedelta(days=direction)
             step += 1
@@ -40,6 +47,9 @@ class IResource(ABC):
             "Can't find nearest availability time for resource", self.name,
             "after", start_date.strftime('%Y-%m-%d')
         )
+
+    def reserve(self, date: datetime, task: Task, units: float):
+        pass
 
 
 class Resource(IResource):
@@ -63,14 +73,9 @@ class Resource(IResource):
         super().__init__(name)
         self.calendar = calendar
 
-    def get_available_units(self, date: datetime) -> float:
-        """
-        Возвращает количество доступных рабочих часов ресурса в указанную дату
-        :param date: дата
-        :return: количество доступных часов ресурса
-        """
-
-        return self.calendar.get_available_units(date)
+    def get_available_units(self, date: datetime, task: Optional[Task] = None) -> float:
+        units = self.calendar.get_available_units(date)
+        return 0 if units is None else units
 
     def __str__(self):
         return self.name

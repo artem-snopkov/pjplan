@@ -29,12 +29,12 @@ class TestForwardScheduler(TestCase):
         p // Task(1, estimate=10, resource='default')
         p // Task(2, estimate=16, resource='default')
 
-        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
+        s = pl.ForwardScheduler(start=datetime(2026, 1, 1)).calc(p).schedule
 
-        self.assertEqual(datetime(2025, 1, 1), s[1].start)
-        self.assertEqual(datetime(2025, 1, 2, 6), s[1].end)
-        self.assertEqual(datetime(2025, 1, 2, 6), s[2].start)
-        self.assertEqual(datetime(2025, 1, 6, 6), s[2].end)
+        self.assertEqual(datetime(2026, 1, 1), s[1].start)
+        self.assertEqual(datetime(2026, 1, 2, 6), s[1].end)
+        self.assertEqual(datetime(2026, 1, 2, 6), s[2].start)
+        self.assertEqual(datetime(2026, 1, 6, 6), s[2].end)
 
     def test_calc_3(self):
         """
@@ -43,24 +43,24 @@ class TestForwardScheduler(TestCase):
         """
         p = WBS()
         p // Task(1, estimate=8, resource='default')
-        p // Task(2, start=datetime(2025, 1, 1), estimate=8, resource='default')
+        p // Task(2, start=datetime(2026, 1, 1), estimate=8, resource='default')
 
-        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
+        s = pl.ForwardScheduler(start=datetime(2026, 1, 1)).calc(p).schedule
 
-        self.assertEqual(datetime(2025, 1, 1), s[1].start)
-        self.assertEqual(datetime(2025, 1, 2), s[1].end)
-        self.assertEqual(datetime(2025, 1, 1), s[2].start)
-        self.assertEqual(datetime(2025, 1, 3), s[2].end)
+        self.assertEqual(datetime(2026, 1, 1), s[1].start)
+        self.assertEqual(datetime(2026, 1, 2), s[1].end)
+        self.assertEqual(datetime(2026, 1, 1), s[2].start)
+        self.assertEqual(datetime(2026, 1, 3), s[2].end)
 
     def test_calc_4(self):
         p = WBS()
         p // Task(1, estimate=8, resource='default')
         p[1] >> p // Task(2, 'ms', milestone=True)
 
-        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
+        s = pl.ForwardScheduler(start=datetime(2026, 1, 1)).calc(p).schedule
 
-        self.assertEqual(datetime(2025, 1, 2), s[1].end)
-        self.assertEqual(datetime(2025, 1, 2), s[2].start)
+        self.assertEqual(datetime(2026, 1, 2), s[1].end)
+        self.assertEqual(datetime(2026, 1, 2), s[2].start)
 
     # noinspection PyStatementEffect
     def test_calc_5(self):
@@ -70,7 +70,7 @@ class TestForwardScheduler(TestCase):
 
         p[2] >> p[1]
 
-        s = pl.ForwardScheduler(start=datetime(2025, 1, 1)).calc(p).schedule
+        s = pl.ForwardScheduler(start=datetime(2026, 1, 1)).calc(p).schedule
 
-        self.assertEqual(datetime(2025, 1, 1), s[2].start)
-        self.assertEqual(datetime(2025, 1, 2), s[1].start)
+        self.assertEqual(datetime(2026, 1, 1), s[2].start)
+        self.assertEqual(datetime(2026, 1, 2), s[1].start)

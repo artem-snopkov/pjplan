@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 
 sys.path.append('../../src')
 
-from pjplan import Task, DefaultScheduler, WBS, DhtmlxGantt, DhtmlxGanttColumn
+from pjplan import Task, ForwardScheduler, WBS, DhtmlxGantt, DhtmlxGanttColumn
 
 
 def page(project: WBS):
@@ -43,7 +43,10 @@ def page(project: WBS):
         ]
     )
 
-    components.html(gantt.to_html(), height=500)
+    with open("g.html", 'w') as f:
+        f.write(gantt.to_html())
+
+    components.html(gantt.to_html(), height=900)
 
 
 if __name__ == '__main__':
@@ -57,6 +60,6 @@ if __name__ == '__main__':
             t // Task(8, 'Задача 8', predecessors=[prj[6]], estimate=16)
             t // Task(9, 'Задача 9', predecessors=[prj[6]], estimate=16)
 
-    plan, usage = DefaultScheduler(datetime.now()).calc(prj)
+    plan = ForwardScheduler(datetime.now()).calc(prj)
 
-    page(plan)
+    page(plan.schedule)

@@ -391,6 +391,15 @@ class ImmutableListTestCase(TestCase):
 
         self.assertEqual([t2, t3], lst(resource_like_="R*"))
 
+    def test_search_not_like(self):
+        t1 = Task(1)
+        t2 = Task(2, name="1 MVP 3123123")
+        t3 = Task(3, name="R2")
+
+        lst = _ImmutableTaskList([t1, t2, t3])
+
+        print(lst(name_not_like_="MVP"))
+
     def test_order_by(self):
         t1 = Task(1)
         t2 = Task(2, resource="R1")

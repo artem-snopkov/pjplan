@@ -122,7 +122,7 @@ class DhtmlxGantt:
                 progress = 0
                 if t.end < datetime.now():
                     progress = 1
-                elif t.estimate > 0:
+                elif t.estimate > 0 and t.spent is not None:
                     progress = 1 - (max(t.estimate - t.spent, 0))/t.estimate
 
                 data_val = {
@@ -132,6 +132,8 @@ class DhtmlxGantt:
                     'start_date': t.start.strftime("%d-%m-%Y %H:%M"),
                     'end_date': t.end.strftime("%d-%m-%Y %H:%M"),
                     'resource': t.resource,
+                    'estimate': t.estimate,
+                    'spent': t.spent,
                     'open': t.gantt_open if 'gantt_open' in t.__dict__ else 'true',
                     'parent': t.parent.id if t.parent and t.parent in self.wbs.tasks else 0,
                     'progress': progress,

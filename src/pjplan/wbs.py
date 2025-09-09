@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Union, Iterable, Callable, Any
+from typing import Optional, Union, Iterable, Callable, Any, Dict
 
 from pjplan.alg.critical_path import CriticalPathCalculator
 from pjplan.task import Task, EMPTY_TASK_ID, _ChildrenList, _ImmutableTaskList, _to_list, _Repr
@@ -109,7 +109,7 @@ class WBS:
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def __clone(self, roots: Iterable[Task]) -> 'WBS':
+    def __clone_tasks(self, roots: Iterable[Task]) -> Dict[int, Task]:
         all_tasks_list = []
         for r in roots:
             all_tasks_list.append(r)
@@ -135,6 +135,12 @@ class WBS:
             c.children = [cloned_tasks[ch.id] for ch in all_tasks[t.id].children]
             c.predecessors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].predecessors if ch.id in cloned_tasks]
             c.successors = [cloned_tasks[ch.id] for ch in all_tasks[t.id].successors if ch.id in cloned_tasks]
+
+        return cloned_tasks
+
+    def __clone(self, roots: Iterable[Task]) -> 'WBS':
+
+        cloned_tasks = self.__clone_tasks(roots)
 
         cloned_project = WBS()
         cloned_project.roots = [cloned_tasks[r.id] for r in roots]

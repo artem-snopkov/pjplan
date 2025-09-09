@@ -110,9 +110,9 @@ class IWorkCalendar(ABC):
     """Work calendar interface"""
 
     @abstractmethod
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         """
-        Returns number of work hours for date
+        Returns number of work hours for date or None
         :param date: date
         :return: number of work hours
         """
@@ -154,12 +154,12 @@ class WorkCalendarDisjunction(IWorkCalendar):
     ):
         self.__calendars = calendars if calendars is not None else []
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         for c in self.__calendars:
             units = c.get_available_units(date)
-            if units > 0:
+            if units is not None and units > 0:
                 return units
-        return 0
+        return None
 
     def __repr__(self):
         return _repr_calendar_op(self.__calendars, '|')
@@ -173,10 +173,16 @@ class WorkCalendarSum(IWorkCalendar):
     ):
         self.__calendars = calendars if calendars is not None else []
 
-    def get_available_units(self, date: datetime) -> float:
-        units = 0
+    def get_available_units(self, date: datetime) -> Optional[float]:
+        units = None
         for c in self.__calendars:
-            units += c.get_available_units(date)
+            c_units = c.get_available_units(date)
+            if c_units is None:
+                continue
+            if units is None:
+                units = c_units
+            else:
+                units += c_units
         return units
 
     def __repr__(self):
@@ -191,14 +197,19 @@ class WorkCalendarSub(IWorkCalendar):
     ):
         self.__calendars = calendars if calendars is not None else []
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         units = None
         for c in self.__calendars:
+            c_units = c.get_available_units(date)
+            if c_units is None:
+                continue
             if units is None:
-                units = c.get_available_units(date)
+                units = c_units
             else:
-                units -= c.get_available_units(date)
-        return 0 if units is None else max(units, 0)
+                units -= c_units
+        if units is None or units < 0:
+            return None
+        return units
 
     def __repr__(self):
         return _repr_standard_calendars(self, self.__calendars, '-')
@@ -212,14 +223,17 @@ class WorkCalendarsMul(IWorkCalendar):
     ):
         self.__calendars = calendars if calendars is not None else []
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         units = None
         for c in self.__calendars:
+            c_units = c.get_available_units(date)
+            if c_units is None:
+                continue
             if units is None:
-                units = c.get_available_units(date)
+                units = c_units
             else:
-                units *= c.get_available_units(date)
-        return 0 if units is None else max(units, 0)
+                units *= c_units
+        return units
 
     def __repr__(self):
         return _repr_standard_calendars(self, self.__calendars, '*')
@@ -233,14 +247,17 @@ class WorkCalendarDiv(IWorkCalendar):
     ):
         self.__calendars = calendars if calendars is not None else []
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         units = None
         for c in self.__calendars:
+            c_units = c.get_available_units(date)
+            if c_units is None:
+                continue
             if units is None:
-                units = c.get_available_units(date)
+                units = c_units
             else:
-                units /= c.get_available_units(date)
-        return 0 if units is None else max(units, 0)
+                units /= c_units
+        return units
 
     def __repr__(self):
         return _repr_standard_calendars(self, self.__calendars, '/')
@@ -252,8 +269,8 @@ class FuncCalendar(IWorkCalendar):
         self.__calendar = calendar
         self.__func = func
 
-    def get_available_units(self, date: datetime) -> float:
-        return max(self.__func(self.__calendar.get_available_units(date)), 0)
+    def get_available_units(self, date: datetime) -> Optional[float]:
+        return self.__func(self.__calendar.get_available_units(date))
 
     def __repr__(self):
         res = 'Func: ' + str(self.__func) + '\n'
@@ -272,7 +289,7 @@ class FixedCalendar(IWorkCalendar):
         self.__start = start
         self.__end = end
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         if self.__start is not None and date < self.__start:
             return 0
         if self.__end is not None and date > self.__end:
@@ -295,12 +312,12 @@ class DirectCalendar(IWorkCalendar):
         else:
             self.__units = {}
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         key = _day_start(date)
         if key in self.__units:
             return self.__units[key]
         else:
-            return 0
+            return None
 
     def set_units(self, units: Dict[datetime, float]):
         self.__units = self.__units | units
@@ -383,12 +400,12 @@ class WeeklyCalendar(IWorkCalendar):
     def get_week_day_hours(self) -> Dict[int, float]:
         return dict(self.__day_hours)
 
-    def get_available_units(self, date: datetime) -> float:
+    def get_available_units(self, date: datetime) -> Optional[float]:
         if self.__start is not None and date < self.__start:
-            return 0
+            return None
 
         if self.__end is not None and date > self.__end:
-            return 0
+            return None
 
         return self.__day_hours[date.weekday()]
 
